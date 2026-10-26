@@ -8,8 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.162.0",
     "httpx>=0.28.1",
     "pydantic>=2.14.1",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
@@ -17,6 +19,7 @@ chat = "foundations.chat:main"
 extract-eval = "foundations.extract_eval:main"
 agent = "foundations.agent:main"
 tool-eval = "foundations.tool_eval:main"
+serve = "foundations.api:serve"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
