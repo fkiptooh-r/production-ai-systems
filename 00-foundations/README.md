@@ -20,19 +20,22 @@
 - [x] **M4 · Tool calling.** Give the model a tool such as `search_listings(max_price, bedrooms)` that reads a local JSON file. Run the model → tool → model loop by hand, without a framework.
   *Deliverable:* "find me a 2-bedroom under 40k" returns real results from your JSON.
 - [x] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
-- [ ] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
+- [x] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
 - [ ] **M7 · Docker + deploy.** `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
 - [ ] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
 - [ ] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
 
 ## How to run
 
-Requires [uv](https://docs.astral.sh/uv/) and [Ollama](https://ollama.com/) running locally.
+Requires [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com/) and
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) running locally.
 
 ```bash
-ollama pull llama3.2:3b          # one-time model download (~2 GB)
+ollama pull llama3.2:3b          # one-time model downloads (~2 GB + ~1 GB)
+ollama pull qwen2.5:1.5b
+docker compose up -d             # Postgres on 127.0.0.1:5433 (5432 may be taken by a local install)
 uv sync                          # install dependencies
-uv run pytest                    # tests (no Ollama needed, HTTP is faked)
+uv run pytest                    # tests; DB tests are skipped if Postgres isn't running
 uv run chat "What is an embedding?"
 uv run chat "Hi" --model qwen2.5:1.5b --retries 5
 uv run extract-eval              # score listing extraction (~2 min on CPU)
@@ -45,13 +48,27 @@ uv run serve                     # API at http://localhost:8000, try it at /docs
 
 | Endpoint | Does | Notes |
 |----------|------|-------|
-| `GET /health` | Service + Ollama status | 503 when Ollama is unreachable |
-| `POST /chat` | `{"prompt"}` → streamed reply | Server-Sent Events: `token`… then `done` or `error` |
+| `GET /health` | Service, Ollama and database status | 503 when either is unreachable |
+| `POST /chat` | `{"prompt", "conversation_id"?}` → streamed reply | SSE: `token`… then `done` (with `conversation_id`) or `error`. Send the id back to continue the conversation |
+| `GET /conversations` | Recent conversations | Message count + first question |
+| `GET /conversations/{id}` | Full message history | 404 if unknown |
 | `POST /agent` | `{"question"}` → answer + tool steps | Defaults to qwen2.5:1.5b (won the M4 eval) |
 | `POST /extract` | `{"text"}` → validated `Listing` | |
 
 Model failures return **502** (the upstream model failed, not the caller); invalid requests
-return **422** before the model is ever called.
+return **422** before the model is ever called; a database outage returns **503** without
+leaking SQL details.
+
+### Storage
+
+Hand-written SQL in [`sql/schema.sql`](sql/schema.sql) and [`db.py`](src/foundations/db.py):
+`conversations` 1 → many `messages`. A question and its answer are saved in one transaction
+(both or neither), and only the last 20 messages are sent back to the model. Every value is
+a query parameter, never pasted into SQL; a test stores `'); DROP TABLE messages; --` as plain text.
+
+**Windows note:** connection URLs use `127.0.0.1`, not `localhost`. On Windows, `localhost`
+tries IPv6 first; the container and Ollama only listen on IPv4, so each connection waited for
+the IPv6 attempt to time out. Switching took the test suite from 80s to 5s.
 
 ```bash
 curl -N -X POST localhost:8000/chat -H "Content-Type: application/json" -d '{"prompt":"hi"}'
