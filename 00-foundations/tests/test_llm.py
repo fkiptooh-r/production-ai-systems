@@ -105,6 +105,24 @@ def test_error_inside_stream_raises():
         stream_chat("hi", client=client)
 
 
+def test_sends_messages_format_and_options_to_ollama():
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return ok()
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
+    schema = {"type": "object"}
+
+    stream_chat(messages, client=client, response_format=schema, options={"temperature": 0})
+
+    assert sent[0]["messages"] == messages
+    assert sent[0]["format"] == schema
+    assert sent[0]["options"] == {"temperature": 0}
+
+
 def test_stream_without_done_message_raises():
     partial = ndjson({"message": {"content": "Hel"}, "done": False})
     client = fake_client(httpx.Response(200, text=partial))
