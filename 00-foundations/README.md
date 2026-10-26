@@ -19,7 +19,7 @@
   *Deliverable:* 10 sample texts → 10 validated objects, with tests.
 - [x] **M4 · Tool calling.** Give the model a tool such as `search_listings(max_price, bedrooms)` that reads a local JSON file. Run the model → tool → model loop by hand, without a framework.
   *Deliverable:* "find me a 2-bedroom under 40k" returns real results from your JSON.
-- [ ] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
+- [x] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
 - [ ] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
 - [ ] **M7 · Docker + deploy.** `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
 - [ ] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
@@ -38,6 +38,23 @@ uv run chat "Hi" --model qwen2.5:1.5b --retries 5
 uv run extract-eval              # score listing extraction (~2 min on CPU)
 uv run agent "Find me a 2-bedroom under 40k with parking"
 uv run tool-eval --model qwen2.5:1.5b   # score tool choice + arguments (~1 min)
+uv run serve                     # API at http://localhost:8000, try it at /docs
+```
+
+### API
+
+| Endpoint | Does | Notes |
+|----------|------|-------|
+| `GET /health` | Service + Ollama status | 503 when Ollama is unreachable |
+| `POST /chat` | `{"prompt"}` → streamed reply | Server-Sent Events: `token`… then `done` or `error` |
+| `POST /agent` | `{"question"}` → answer + tool steps | Defaults to qwen2.5:1.5b (won the M4 eval) |
+| `POST /extract` | `{"text"}` → validated `Listing` | |
+
+Model failures return **502** (the upstream model failed, not the caller); invalid requests
+return **422** before the model is ever called.
+
+```bash
+curl -N -X POST localhost:8000/chat -H "Content-Type: application/json" -d '{"prompt":"hi"}'
 ```
 
 Example output:
