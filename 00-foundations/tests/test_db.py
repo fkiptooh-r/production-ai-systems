@@ -1,8 +1,11 @@
 """Integration tests: the real SQL against the real Postgres from docker-compose.yml.
 
-Skipped automatically when the database isn't running, so `uv run pytest` still works
-without Docker. Start it with: docker compose up -d
+Skipped locally when the database isn't running, so `uv run pytest` still works without
+Docker (start it with: docker compose up -d). In CI they never skip: a database that
+failed to start must fail the build, not hide behind a green tick.
 """
+
+import os
 
 import pytest
 
@@ -10,7 +13,8 @@ from foundations.db import ConversationNotFound, PostgresStore
 
 store = PostgresStore()
 pytestmark = pytest.mark.skipif(
-    not store.is_up(), reason="Postgres not running (docker compose up -d)"
+    not store.is_up() and not os.getenv("CI"),
+    reason="Postgres not running (docker compose up -d)",
 )
 
 

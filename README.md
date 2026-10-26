@@ -1,5 +1,7 @@
 # Production AI Systems
 
+[![CI](https://github.com/fkiptooh-r/production-ai-systems/actions/workflows/ci.yml/badge.svg)](https://github.com/fkiptooh-r/production-ai-systems/actions/workflows/ci.yml)
+
 Five production-grade AI engineering projects, one core skill each, built in public while learning to ship real LLM systems: **retrieval, observability, evaluation, cost control, and real-time voice.**
 
 > 🚧 **Status:** learning in public. Each project folder has its own roadmap with milestones; progress is tracked in the table below.
