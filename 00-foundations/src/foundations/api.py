@@ -4,7 +4,6 @@ Run:   uv run serve          then open http://localhost:8000/docs
 """
 
 import json
-import os
 import queue
 import threading
 from collections.abc import Callable, Iterator
@@ -16,11 +15,12 @@ import uvicorn
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from shared.config import get_settings
+from shared.llm import DEFAULT_MODEL, ChatResult, LLMError, stream_chat
 
 from foundations.agent import AgentError, ToolStep, run_agent
 from foundations.db import ConversationNotFound, PostgresStore
 from foundations.extract import ExtractionError, Listing, extract_listing
-from foundations.llm import DEFAULT_BASE_URL, DEFAULT_MODEL, ChatResult, LLMError, stream_chat
 
 # Chosen by measurement: qwen2.5:1.5b scored 100% / 90% on the M4 tool eval vs llama's 80% / 80%.
 AGENT_MODEL = "qwen2.5:1.5b"
@@ -39,7 +39,7 @@ def get_chat() -> Callable[..., ChatResult]:
 
 
 def ollama_is_up() -> bool:
-    base_url = os.getenv("OLLAMA_BASE_URL", DEFAULT_BASE_URL)
+    base_url = get_settings().ollama_base_url
     try:
         return httpx.get(f"{base_url}/api/version", timeout=2).is_success
     except httpx.HTTPError:

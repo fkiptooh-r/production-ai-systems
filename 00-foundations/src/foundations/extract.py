@@ -10,8 +10,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
-
-from foundations.llm import DEFAULT_MODEL, ChatResult, stream_chat
+from shared.llm import DEFAULT_MODEL, ChatResult, stream_chat
 
 PropertyType = Literal["apartment", "house", "bedsitter", "studio", "single_room", "other"]
 

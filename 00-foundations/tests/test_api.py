@@ -4,10 +4,10 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from shared.llm import ChatResult, LLMError
 
 from foundations.api import app, get_chat, get_store, ollama_is_up
 from foundations.db import ConversationNotFound
-from foundations.llm import ChatResult, LLMError
 
 VALID_LISTING = {
     "property_type": "apartment",

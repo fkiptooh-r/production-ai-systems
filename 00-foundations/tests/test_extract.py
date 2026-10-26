@@ -2,10 +2,10 @@ import json
 
 import pytest
 from pydantic import ValidationError
+from shared.llm import ChatResult
 
 from foundations.extract import ExtractionError, Listing, extract_listing
 from foundations.extract_eval import score
-from foundations.llm import ChatResult
 
 VALID_JSON = json.dumps(
     {

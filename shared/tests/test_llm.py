@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from foundations.llm import LLMError, stream_chat
+from shared.llm import LLMError, stream_chat
 
 
 def ndjson(*chunks: dict) -> str:

@@ -14,7 +14,8 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from foundations.llm import DEFAULT_MODEL, ChatResult, LLMError, stream_chat
+from shared.llm import DEFAULT_MODEL, ChatResult, LLMError, stream_chat
+
 from foundations.tools import execute_tool, load_listings, tool_schemas
 
 SYSTEM_PROMPT = """You are a helpful rental assistant.
