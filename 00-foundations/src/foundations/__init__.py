@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from foundations!")
+"""Foundations: LLM API calls, structured output, tool calling, FastAPI, deployment."""
