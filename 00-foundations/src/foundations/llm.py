@@ -40,9 +40,11 @@ class ChatResult:
 
 
 def stream_chat(
-    prompt: str,
+    prompt: str | list[dict],
     *,
     model: str = DEFAULT_MODEL,
+    response_format: dict | None = None,
+    options: dict | None = None,
     base_url: str | None = None,
     timeout: float = 120.0,
     max_retries: int = 3,
@@ -50,18 +52,23 @@ def stream_chat(
     client: httpx.Client | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> ChatResult:
-    """Send one prompt, call on_token for each piece of the reply, return the result.
+    """Send a prompt, call on_token for each piece of the reply, return the result.
+
+    prompt is either one user message, or a full list of {"role", "content"} messages.
+    response_format is a JSON schema the reply must follow (Ollama's "format" field).
+    options are model settings such as {"temperature": 0}.
 
     timeout is the longest wait for the *next* piece of data, not for the whole reply.
     Failures are retried with exponential backoff: wait 1s, 2s, 4s, ...
     client and sleep can be replaced in tests so nothing touches the network or waits.
     """
     base_url = base_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_BASE_URL)
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True,
-    }
+    messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
+    payload: dict = {"model": model, "messages": messages, "stream": True}
+    if response_format is not None:
+        payload["format"] = response_format
+    if options is not None:
+        payload["options"] = options
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
 
