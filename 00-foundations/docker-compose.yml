@@ -1,0 +1,24 @@
+# Local development database. Start: docker compose up -d   Stop: docker compose down
+services:
+  postgres:
+    # Postgres 17 with the pgvector extension, which project 01 (hybrid RAG) will need.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # local development only; never reuse in production
+      POSTGRES_DB: ai_systems
+    ports:
+      # 5433 on this machine, because a Windows Postgres service already uses 5432.
+      # Bound to 127.0.0.1 so only this computer can connect, not the whole network.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data # data survives container restarts
+      - ./sql:/docker-entrypoint-initdb.d:ro # schema.sql runs on first start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_systems"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

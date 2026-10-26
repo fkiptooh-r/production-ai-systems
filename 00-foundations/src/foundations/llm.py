@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 
 import httpx
 
-DEFAULT_BASE_URL = "http://localhost:11434"
+# 127.0.0.1, not "localhost": on Windows, localhost tries IPv6 first and Ollama only
+# listens on IPv4, adding ~1.5s to every request.
+DEFAULT_BASE_URL = "http://127.0.0.1:11434"
 DEFAULT_MODEL = "llama3.2:3b"
 
 # Worth retrying: the server is overloaded or briefly broken.

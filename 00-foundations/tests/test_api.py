@@ -1,11 +1,12 @@
-"""API tests: real HTTP requests through FastAPI's TestClient, with fake models."""
+"""API tests: real HTTP requests through FastAPI's TestClient, with a fake model and store."""
 
 import json
 
 import pytest
 from fastapi.testclient import TestClient
 
-from foundations.api import app, get_chat, ollama_is_up
+from foundations.api import app, get_chat, get_store, ollama_is_up
+from foundations.db import ConversationNotFound
 from foundations.llm import ChatResult, LLMError
 
 VALID_LISTING = {
@@ -24,8 +25,10 @@ class FakeChat:
 
     def __init__(self, *replies: ChatResult | Exception) -> None:
         self.replies = list(replies)
+        self.prompts: list = []
 
     def __call__(self, prompt, *, on_token=lambda _: None, **kwargs) -> ChatResult:
+        self.prompts.append(prompt)
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
@@ -40,14 +43,49 @@ def text_reply(text: str, *tool_calls: dict) -> ChatResult:
     )
 
 
+class InMemoryStore:
+    """Stands in for PostgresStore: same methods, data kept in a dict."""
+
+    def __init__(self) -> None:
+        self.up = True
+        self.conversations: dict[int, list[dict]] = {}
+
+    def is_up(self) -> bool:
+        return self.up
+
+    def create_conversation(self) -> int:
+        conversation_id = len(self.conversations) + 1
+        self.conversations[conversation_id] = []
+        return conversation_id
+
+    def add_exchange(self, conversation_id, user_text, assistant_text, **details) -> None:
+        self.conversations[conversation_id] += [
+            {"role": "user", "content": user_text},
+            {"role": "assistant", "content": assistant_text},
+        ]
+
+    def get_messages(self, conversation_id: int, limit: int = 20) -> list[dict]:
+        if conversation_id not in self.conversations:
+            raise ConversationNotFound(conversation_id)
+        return self.conversations[conversation_id][-limit:]
+
+
 @pytest.fixture
-def client():
+def store() -> InMemoryStore:
+    return InMemoryStore()
+
+
+@pytest.fixture
+def client(store):
+    app.dependency_overrides[get_store] = lambda: store
     yield TestClient(app)
     app.dependency_overrides.clear()
 
 
-def use_model(*replies: ChatResult | Exception) -> None:
-    app.dependency_overrides[get_chat] = lambda: FakeChat(*replies)
+def use_model(*replies: ChatResult | Exception) -> FakeChat:
+    model = FakeChat(*replies)
+    app.dependency_overrides[get_chat] = lambda: model
+    return model
 
 
 def parse_sse(body: str) -> list[tuple[str, dict]]:
@@ -58,11 +96,11 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
     return events
 
 
-def test_health_ok_when_ollama_is_up(client):
+def test_health_ok_when_everything_is_up(client):
     app.dependency_overrides[ollama_is_up] = lambda: True
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "ollama": "up"}
+    assert response.json() == {"status": "ok", "ollama": "up", "database": "up"}
 
 
 def test_health_is_503_when_ollama_is_down(client):
@@ -70,6 +108,14 @@ def test_health_is_503_when_ollama_is_down(client):
     response = client.get("/health")
     assert response.status_code == 503
     assert response.json()["ollama"] == "down"
+
+
+def test_health_is_503_when_database_is_down(client, store):
+    app.dependency_overrides[ollama_is_up] = lambda: True
+    store.up = False
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json()["database"] == "down"
 
 
 def test_chat_streams_tokens_then_done(client):
@@ -81,15 +127,46 @@ def test_chat_streams_tokens_then_done(client):
     assert response.headers["content-type"].startswith("text/event-stream")
     events = parse_sse(response.text)
     assert events[:2] == [("token", {"text": "Hello"}), ("token", {"text": "there"})]
-    assert events[-1] == ("done", {"input_tokens": 7, "output_tokens": 3, "seconds": 0.5})
+    assert events[-1] == (
+        "done",
+        {"input_tokens": 7, "output_tokens": 3, "seconds": 0.5, "conversation_id": 1},
+    )
 
 
-def test_chat_failure_arrives_as_an_error_event(client):
+def test_follow_up_sees_earlier_messages_and_everything_is_saved(client, store):
+    model = use_model(text_reply("L010 is 35k."), text_reply("It is in Ruaka."))
+
+    first = parse_sse(client.post("/chat", json={"prompt": "cheapest 2BR?"}).text)
+    conversation_id = first[-1][1]["conversation_id"]
+    client.post("/chat", json={"prompt": "where is it?", "conversation_id": conversation_id})
+
+    assert model.prompts[1] == [
+        {"role": "user", "content": "cheapest 2BR?"},
+        {"role": "assistant", "content": "L010 is 35k."},
+        {"role": "user", "content": "where is it?"},
+    ]
+    saved = client.get(f"/conversations/{conversation_id}").json()["messages"]
+    assert [m["content"] for m in saved] == [
+        "cheapest 2BR?",
+        "L010 is 35k.",
+        "where is it?",
+        "It is in Ruaka.",
+    ]
+
+
+def test_unknown_conversation_is_404(client):
+    use_model()
+    response = client.post("/chat", json={"prompt": "hi", "conversation_id": 999})
+    assert response.status_code == 404
+
+
+def test_chat_failure_arrives_as_an_error_event_and_nothing_is_saved(client, store):
     use_model(LLMError("gave up after 4 attempts"))
 
     events = parse_sse(client.post("/chat", json={"prompt": "hi"}).text)
 
     assert events == [("error", {"message": "gave up after 4 attempts"})]
+    assert store.conversations[1] == []
 
 
 def test_empty_prompt_is_rejected_before_reaching_the_model(client):

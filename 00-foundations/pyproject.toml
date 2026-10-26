@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.162.0",
     "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
     "uvicorn>=0.54.0",
 ]
@@ -20,6 +21,7 @@ extract-eval = "foundations.extract_eval:main"
 agent = "foundations.agent:main"
 tool-eval = "foundations.tool_eval:main"
 serve = "foundations.api:serve"
+db-init = "foundations.db:init_db"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
