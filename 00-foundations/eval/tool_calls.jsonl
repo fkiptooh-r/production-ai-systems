@@ -1,0 +1,10 @@
+{"question": "Find me a 2-bedroom under 40k with parking", "tool": "search_listings", "arguments": {"bedrooms": 2, "max_price": 40000, "parking": true}}
+{"question": "Any apartments in Kilimani?", "tool": "search_listings", "arguments": {"location": "Kilimani"}}
+{"question": "Show me places under 10,000 a month", "tool": "search_listings", "arguments": {"max_price": 10000}}
+{"question": "Tell me more about listing L007", "tool": "get_listing", "arguments": {"listing_id": "L007"}}
+{"question": "I need a 3 bedroom place", "tool": "search_listings", "arguments": {"bedrooms": 3}}
+{"question": "What is a bedsitter?", "tool": null, "arguments": null}
+{"question": "Cheapest options in Ruaka with parking under 30k", "tool": "search_listings", "arguments": {"location": "Ruaka", "parking": true, "max_price": 30000}}
+{"question": "What are the details of L003?", "tool": "get_listing", "arguments": {"listing_id": "L003"}}
+{"question": "Is there anything in Syokimau?", "tool": "search_listings", "arguments": {"location": "Syokimau"}}
+{"question": "Hello! What can you help me with?", "tool": null, "arguments": null}

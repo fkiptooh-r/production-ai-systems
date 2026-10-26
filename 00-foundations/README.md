@@ -17,7 +17,7 @@
   *Deliverable:* `uv run chat "hello"` streams a reply and prints the cost.
 - [x] **M3 · Structured output.** Ask the model to extract fields (e.g. from a house listing text: price, bedrooms, location) into a Pydantic model. Handle invalid JSON.
   *Deliverable:* 10 sample texts → 10 validated objects, with tests.
-- [ ] **M4 · Tool calling.** Give the model a tool such as `search_listings(max_price, bedrooms)` that reads a local JSON file. Run the model → tool → model loop by hand, without a framework.
+- [x] **M4 · Tool calling.** Give the model a tool such as `search_listings(max_price, bedrooms)` that reads a local JSON file. Run the model → tool → model loop by hand, without a framework.
   *Deliverable:* "find me a 2-bedroom under 40k" returns real results from your JSON.
 - [ ] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
 - [ ] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
@@ -36,6 +36,8 @@ uv run pytest                    # tests (no Ollama needed, HTTP is faked)
 uv run chat "What is an embedding?"
 uv run chat "Hi" --model qwen2.5:1.5b --retries 5
 uv run extract-eval              # score listing extraction (~2 min on CPU)
+uv run agent "Find me a 2-bedroom under 40k with parking"
+uv run tool-eval --model qwen2.5:1.5b   # score tool choice + arguments (~1 min)
 ```
 
 Example output:
@@ -69,6 +71,22 @@ required-but-nullable fixed it; a regression test guards it.
 
 **Remaining misses:** negatives read as "not mentioned" ("No parking" → `null`, not `false`),
 "bungalow" classified as bedsitter, and "Githurai 45" shortened to "Githurai".
+
+### M4 · Tool calling (`uv run tool-eval`, first decision on 10 questions, 2 of which need no tool)
+
+| Metric | llama3.2:3b v1 | llama3.2:3b v2 | qwen2.5:1.5b v2 |
+|--------|----------------|----------------|-----------------|
+| right tool (or correctly none) | 80% | 80% | **100%** |
+| right tool + right arguments | 70% | 80% | **90%** |
+| called a tool when none was needed | 2/2 | 2/2 | **0/2** |
+
+**v1 → v2 (system fix):** llama sent the *string* `"null"` for unwanted filters, which would
+search for a neighbourhood called "null". A shared `ToolArgs` validator now treats
+`"null"` / `"none"` / `""` as unset; regression tests guard it.
+
+**Model limits (measured, not patched):** llama calls a tool even for "Hello!". qwen, at half
+the size, never over-called, but once sent `parking: false` for "with parking", the opposite
+of the request. The model choice matters as much as the code.
 
 ## Done when
 - A public URL that someone else can `curl` and get a streamed answer from

@@ -1,0 +1,17 @@
+[
+  {"id": "L001", "title": "Spacious 2BR apartment, water 24/7", "property_type": "apartment", "bedrooms": 2, "price_per_month": 45000, "location": "Kilimani", "parking": true, "furnished": false},
+  {"id": "L002", "title": "Bedsitter near the highway, secure compound", "property_type": "bedsitter", "bedrooms": 0, "price_per_month": 8500, "location": "Kahawa Wendani", "parking": false, "furnished": false},
+  {"id": "L003", "title": "Furnished studio with gym and pool", "property_type": "studio", "bedrooms": 0, "price_per_month": 65000, "location": "Westlands", "parking": false, "furnished": true},
+  {"id": "L004", "title": "4 bedroom maisonette, all ensuite, borehole", "property_type": "house", "bedrooms": 4, "price_per_month": 85000, "location": "Syokimau", "parking": true, "furnished": false},
+  {"id": "L005", "title": "Single room, shared bathroom", "property_type": "single_room", "bedrooms": 0, "price_per_month": 4000, "location": "Githurai 45", "parking": false, "furnished": false},
+  {"id": "L006", "title": "One bedroom flat with balcony and CCTV", "property_type": "apartment", "bedrooms": 1, "price_per_month": 22000, "location": "Ruaka", "parking": true, "furnished": false},
+  {"id": "L007", "title": "3 bed bungalow on a quarter acre, pets allowed", "property_type": "house", "bedrooms": 3, "price_per_month": 40000, "location": "Ngong", "parking": true, "furnished": false},
+  {"id": "L008", "title": "Newly built 2 bedroom near TRM, lift and generator", "property_type": "apartment", "bedrooms": 2, "price_per_month": 25000, "location": "Roysambu", "parking": false, "furnished": false},
+  {"id": "L009", "title": "Serviced 1BR, wifi and cleaning included", "property_type": "apartment", "bedrooms": 1, "price_per_month": 120000, "location": "Kileleshwa", "parking": true, "furnished": true},
+  {"id": "L010", "title": "2 bedroom apartment with ample parking", "property_type": "apartment", "bedrooms": 2, "price_per_month": 35000, "location": "Ruaka", "parking": true, "furnished": false},
+  {"id": "L011", "title": "2BR garden apartment, quiet estate", "property_type": "apartment", "bedrooms": 2, "price_per_month": 38000, "location": "Kilimani", "parking": true, "furnished": false},
+  {"id": "L012", "title": "3 bedroom townhouse in a gated community", "property_type": "house", "bedrooms": 3, "price_per_month": 70000, "location": "Syokimau", "parking": true, "furnished": false},
+  {"id": "L013", "title": "Studio near the university", "property_type": "studio", "bedrooms": 0, "price_per_month": 12000, "location": "Kahawa Wendani", "parking": false, "furnished": false},
+  {"id": "L014", "title": "Furnished 2 bedroom, short or long stay", "property_type": "apartment", "bedrooms": 2, "price_per_month": 90000, "location": "Westlands", "parking": true, "furnished": true},
+  {"id": "L015", "title": "Bedsitter with own meter", "property_type": "bedsitter", "bedrooms": 0, "price_per_month": 7000, "location": "Ruaka", "parking": false, "furnished": false}
+]
