@@ -11,7 +11,7 @@
 
 ## Milestones
 
-- [ ] **M1 · Tooling.** Install [`uv`](https://docs.astral.sh/uv/). Create a project, add `ruff` + `pytest`, and write one function with one test.
+- [x] **M1 · Tooling.** Install [`uv`](https://docs.astral.sh/uv/). Create a project, add `ruff` + `pytest`, and write one function with one test.
   *Deliverable:* `uv run pytest` passes.
 - [ ] **M2 · First LLM call.** A script that calls one provider (or a local model via Ollama). Add streaming, a timeout, retries with backoff, and print tokens used plus the estimated cost.
   *Deliverable:* `uv run python chat.py "hello"` streams a reply and prints the cost.

@@ -12,7 +12,7 @@ Calling an LLM API is easy. Making the result **reliable, measurable, affordable
 
 | # | Project | Core skill | Status |
 |---|---------|------------|--------|
-| 00 | [Foundations](00-foundations/) | Python, LLM APIs, FastAPI, Docker, deployment | ⬜ Not started |
+| 00 | [Foundations](00-foundations/) | Python, LLM APIs, FastAPI, Docker, deployment | 🟨 In progress |
 | 01 | [Hybrid RAG search](01-hybrid-rag/) | Hybrid retrieval, reranking, citations, tenant isolation | ⬜ Not started |
 | 02 | [Failure forensics](02-llm-tracing/) | LLM tracing and observability | ⬜ Not started |
 | 03 | [Output arbitration](03-llm-judge/) | LLM-as-a-judge, eval pipelines | ⬜ Not started |
