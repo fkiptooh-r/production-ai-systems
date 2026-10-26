@@ -1,6 +1,6 @@
 import pytest
 
-from foundations.costs import estimate_cost
+from shared.costs import estimate_cost
 
 
 def test_one_million_tokens_each_costs_the_sum_of_both_prices():

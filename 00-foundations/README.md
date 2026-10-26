@@ -23,7 +23,7 @@
 - [x] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
 - [ ] **M7 · Docker + deploy.** `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
 - [x] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
-- [ ] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
+- [x] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
 
 ## How to run
 

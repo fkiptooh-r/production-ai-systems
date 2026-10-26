@@ -6,16 +6,12 @@ Pasting user text into SQL is how SQL injection happens.
 Usage: uv run db-init     (re-applies sql/schema.sql; safe to run repeatedly)
 """
 
-import os
 from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
+from shared.config import get_settings
 
-# Port 5433: the Docker database (see docker-compose.yml), not the Windows Postgres service.
-# 127.0.0.1, not "localhost": on Windows, localhost tries IPv6 first, and the container
-# only listens on IPv4, so every connection waited ~3-5s for the IPv6 attempt to time out.
-DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5433/ai_systems"
 SCHEMA_FILE = Path(__file__).resolve().parents[2] / "sql" / "schema.sql"
 
 # Only the most recent messages are sent back to the model, so long conversations
@@ -27,13 +23,9 @@ class ConversationNotFound(Exception):
     pass
 
 
-def database_url() -> str:
-    return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
-
-
 class PostgresStore:
     def __init__(self, url: str | None = None) -> None:
-        self.url = url or database_url()
+        self.url = url or get_settings().database_url
 
     def _connect(self) -> psycopg.Connection:
         return psycopg.connect(self.url, row_factory=dict_row, connect_timeout=3)

@@ -9,8 +9,9 @@ import sys
 import time
 from pathlib import Path
 
+from shared.llm import DEFAULT_MODEL, LLMError
+
 from foundations.extract import ExtractionError, Listing, extract_listing
-from foundations.llm import DEFAULT_MODEL, LLMError
 
 # amenities is free text, so it isn't scored exactly. Improving that is a good exercise.
 SCORED_FIELDS = ["property_type", "bedrooms", "price_per_month", "location", "parking", "furnished"]
