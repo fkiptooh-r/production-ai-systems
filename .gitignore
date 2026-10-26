@@ -1,0 +1,50 @@
+# --- Secrets: NEVER commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- Private notes (personal roadmap, product ideas, progress log) ---
+_private/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# --- Data and models (keep large or private files out of git) ---
+data/raw/
+data/private/
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+*.bin
+*.gguf
+*.safetensors
+*.onnx
+models/
+recordings/
+*.wav
+*.mp3
+
+# --- Node (for any small UIs) ---
+node_modules/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
