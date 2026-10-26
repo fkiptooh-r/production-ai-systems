@@ -58,7 +58,10 @@ Prices and free tiers change often, so check them on each provider's site before
 Most platforms (Render, Fly.io, Railway, Google Cloud Run, a VM with Docker) can either build
 from this `Dockerfile` or run the image directly.
 
-- [ ] Point the platform at `00-foundations/` (the Dockerfile's folder).
+- [ ] Build settings: **context = repo root**, **Dockerfile = `00-foundations/Dockerfile`**.
+      The app depends on `../shared`, so building from inside `00-foundations/` fails with
+      `Distribution not found at: file:///shared`. Ignore rules live in
+      `00-foundations/Dockerfile.dockerignore` (allow-list: only `shared/` and `00-foundations/`).
 - [ ] Set environment variables: `DATABASE_URL`, `OLLAMA_BASE_URL` (or the provider key for
       option B), and the API key from step 2.
 - [ ] Health check path: `/health` (it returns 503 when the model or database is unreachable).

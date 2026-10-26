@@ -23,7 +23,10 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      # Repo root as context, so the image can include ../shared (see the Dockerfile).
+      context: ..
+      dockerfile: 00-foundations/Dockerfile
     profiles: ["api"] # only started when asked for, so `docker compose up -d` stays DB-only
     ports:
       # Change the host port if 8000 is busy, e.g. API_PORT=8001 docker compose --profile api up -d
