@@ -1,0 +1,10 @@
+# Keep the image small and free of local or secret files.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+tests/
+eval/
+.env
+.env.*

@@ -1,4 +1,6 @@
-# Local development database. Start: docker compose up -d   Stop: docker compose down
+# Database only (for `uv run serve`):   docker compose up -d
+# Database + API in containers:         docker compose --profile api up -d --build
+# Stop everything (keeps data):         docker compose --profile api down
 services:
   postgres:
     # Postgres 17 with the pgvector extension, which project 01 (hybrid RAG) will need.
@@ -19,6 +21,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  api:
+    build: .
+    profiles: ["api"] # only started when asked for, so `docker compose up -d` stays DB-only
+    ports:
+      # Change the host port if 8000 is busy, e.g. API_PORT=8001 docker compose --profile api up -d
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    environment:
+      # Inside Docker, services reach each other by service name on the internal port.
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_systems
+      # Ollama runs on the Windows host, not in a container; this name points to the host.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
