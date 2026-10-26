@@ -123,6 +123,28 @@ def test_sends_messages_format_and_options_to_ollama():
     assert sent[0]["options"] == {"temperature": 0}
 
 
+def test_collects_tool_calls_and_sends_tool_definitions():
+    sent: list[dict] = []
+    tool_call = {"function": {"name": "get_listing", "arguments": {"listing_id": "L007"}}}
+    body = ndjson(
+        {"message": {"content": "", "tool_calls": [tool_call]}, "done": False},
+        {"message": {"content": ""}, "done": True, "prompt_eval_count": 5, "eval_count": 3},
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, text=body)
+
+    tools = [{"type": "function", "function": {"name": "get_listing"}}]
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    result = stream_chat("details of L007", client=client, tools=tools)
+
+    assert sent[0]["tools"] == tools
+    assert result.tool_calls == [tool_call]
+    assert result.text == ""
+
+
 def test_stream_without_done_message_raises():
     partial = ndjson({"message": {"content": "Hel"}, "done": False})
     client = fake_client(httpx.Response(200, text=partial))

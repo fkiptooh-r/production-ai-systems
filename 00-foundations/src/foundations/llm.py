@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -37,6 +37,8 @@ class ChatResult:
     input_tokens: int
     output_tokens: int
     seconds: float
+    # Functions the model asked us to run: [{"function": {"name": ..., "arguments": {...}}}]
+    tool_calls: list[dict] = field(default_factory=list)
 
 
 def stream_chat(
@@ -45,6 +47,7 @@ def stream_chat(
     model: str = DEFAULT_MODEL,
     response_format: dict | None = None,
     options: dict | None = None,
+    tools: list[dict] | None = None,
     base_url: str | None = None,
     timeout: float = 120.0,
     max_retries: int = 3,
@@ -57,6 +60,7 @@ def stream_chat(
     prompt is either one user message, or a full list of {"role", "content"} messages.
     response_format is a JSON schema the reply must follow (Ollama's "format" field).
     options are model settings such as {"temperature": 0}.
+    tools are function definitions the model may choose to call (see foundations.tools).
 
     timeout is the longest wait for the *next* piece of data, not for the whole reply.
     Failures are retried with exponential backoff: wait 1s, 2s, 4s, ...
@@ -69,6 +73,8 @@ def stream_chat(
         payload["format"] = response_format
     if options is not None:
         payload["options"] = options
+    if tools:
+        payload["tools"] = tools
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
 
@@ -96,6 +102,7 @@ def _stream_once(
 ) -> ChatResult:
     started = time.perf_counter()
     parts: list[str] = []
+    tool_calls: list[dict] = []
     try:
         with client.stream("POST", url, json=payload) as response:
             if response.status_code in RETRYABLE_STATUS_CODES:
@@ -111,10 +118,12 @@ def _stream_once(
                 if "error" in chunk:
                     raise LLMError(chunk["error"])
 
-                token = chunk.get("message", {}).get("content", "")
+                message = chunk.get("message", {})
+                token = message.get("content", "")
                 if token:
                     parts.append(token)
                     on_token(token)
+                tool_calls.extend(message.get("tool_calls") or [])
 
                 if chunk.get("done"):
                     return ChatResult(
@@ -122,6 +131,7 @@ def _stream_once(
                         input_tokens=chunk.get("prompt_eval_count", 0),
                         output_tokens=chunk.get("eval_count", 0),
                         seconds=time.perf_counter() - started,
+                        tool_calls=tool_calls,
                     )
     except httpx.TransportError as exc:  # connection refused, timeout, dropped connection
         if parts:
