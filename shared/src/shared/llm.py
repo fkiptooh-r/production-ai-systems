@@ -6,16 +6,14 @@ then a final object with "done": true that carries the token counts.
 
 import json
 import logging
-import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
 
-# 127.0.0.1, not "localhost": on Windows, localhost tries IPv6 first and Ollama only
-# listens on IPv4, adding ~1.5s to every request.
-DEFAULT_BASE_URL = "http://127.0.0.1:11434"
+from shared.config import get_settings
+
 DEFAULT_MODEL = "llama3.2:3b"
 
 # Worth retrying: the server is overloaded or briefly broken.
@@ -68,7 +66,7 @@ def stream_chat(
     Failures are retried with exponential backoff: wait 1s, 2s, 4s, ...
     client and sleep can be replaced in tests so nothing touches the network or waits.
     """
-    base_url = base_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_BASE_URL)
+    base_url = base_url or get_settings().ollama_base_url
     messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
     payload: dict = {"model": model, "messages": messages, "stream": True}
     if response_format is not None:

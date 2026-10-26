@@ -1,0 +1,34 @@
+[project]
+name = "shared"
+version = "0.1.0"
+description = "Reusable building blocks for every project: LLM client, config, cost estimation"
+readme = "README.md"
+authors = [
+    { name = "fkiptooh-r", email = "fkiptooh@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# E/F: errors, I: import sorting, B: likely bugs, UP: modern Python syntax
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

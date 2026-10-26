@@ -1,14 +1,42 @@
 # shared/
 
-Reusable building blocks that more than one project needs. Code moves here only once a **second** project needs it, so don't abstract early.
+Reusable building blocks that more than one project needs, installed into each project as a
+local package. Code moves here only once a **second** project needs it, so don't abstract early.
 
-Expected to grow into:
+## Modules
 
-| Module | Born in | Reused by |
-|--------|---------|-----------|
-| `llm_client` (one interface over providers, retries, token/cost counting) | 00 | all |
-| `config` (loads `.env`, typed settings) | 00 | all |
-| `tracing` (span decorator / OpenTelemetry setup) | 02 | 01, 03, 04, 05 |
-| `retriever` (tenant-aware hybrid search) | 01 | 05 |
-| `judge` (rubric-based scoring) | 03 | 04, 05 |
-| `router` (model selection + budgets) | 04 | 05 |
+| Module | What | Born in |
+|--------|------|---------|
+| `shared.llm` | Streaming Ollama client: retries with backoff, JSON-schema output, tool calls, token counts | 00 (M2–M4) |
+| `shared.costs` | `estimate_cost()` per million-token prices | 00 (M1) |
+| `shared.config` | Typed settings from env vars / `.env` (`OLLAMA_BASE_URL`, `DATABASE_URL`) | 00 (M9) |
+
+Planned: `tracing` (02), `retriever` (01), `judge` (03), `router` (04).
+
+## Using it from a project
+
+In the project's `pyproject.toml`:
+
+```toml
+[project]
+dependencies = ["shared"]
+
+[tool.uv.sources]
+shared = { path = "../shared", editable = true }
+```
+
+`editable = true` means edits in `shared/` are picked up immediately, without reinstalling.
+
+```python
+from shared.config import get_settings
+from shared.llm import stream_chat
+```
+
+## Develop
+
+```bash
+cd shared
+uv sync
+uv run pytest            # no Ollama or database needed
+uv run ruff check . && uv run ruff format --check .
+```

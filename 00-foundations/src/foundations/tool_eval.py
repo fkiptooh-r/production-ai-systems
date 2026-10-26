@@ -13,9 +13,9 @@ import time
 from pathlib import Path
 
 from pydantic import ValidationError
+from shared.llm import DEFAULT_MODEL, LLMError, stream_chat
 
 from foundations.agent import SYSTEM_PROMPT
-from foundations.llm import DEFAULT_MODEL, LLMError, stream_chat
 from foundations.tools import TOOLS, tool_schemas
 
 DEFAULT_FILE = Path(__file__).resolve().parents[2] / "eval" / "tool_calls.jsonl"

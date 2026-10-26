@@ -7,8 +7,8 @@ import argparse
 import logging
 import sys
 
-from foundations.costs import estimate_cost
-from foundations.llm import DEFAULT_MODEL, LLMError, stream_chat
+from shared.costs import estimate_cost
+from shared.llm import DEFAULT_MODEL, LLMError, stream_chat
 
 
 def main() -> None:

@@ -22,8 +22,8 @@
 - [x] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
 - [x] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
 - [ ] **M7 · Docker + deploy.** 🟨 *Dockerfile + compose done and tested locally; cloud deploy pending, see [DEPLOY.md](DEPLOY.md).* `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
-- [ ] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
-- [ ] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
+- [x] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
+- [x] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
 
 ## How to run
 

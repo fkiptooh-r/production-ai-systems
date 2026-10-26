@@ -1,9 +1,9 @@
 import json
 
 import pytest
+from shared.llm import ChatResult
 
 from foundations.agent import AgentError, run_agent
-from foundations.llm import ChatResult
 from foundations.tool_eval import grade
 from foundations.tools import load_listings
 
