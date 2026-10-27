@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ brand.name }} · Ask the agency{% endblock %}
+
+{# The tenant reaches the script only through this attribute, rendered (and escaped) by the
+   server from the URL it already validated. The page has no way to pick another tenant. #}
+{% block body_attrs %} data-tenant="{{ brand.tenant_id }}" data-agency="{{ brand.name }}"{% endblock %}
+
+{% block heading %}
+<h1>{{ brand.name }}<small>{{ brand.tagline }}</small></h1>
+{% endblock %}
+
+{% block content %}
+<main id="log" aria-live="polite">
+  <p class="empty" id="empty">Ask {{ brand.name }} about deposits, pets, viewings, repairs or the area.</p>
+</main>
+
+<div class="chips">
+  {% for question in brand.examples %}
+  <button type="button" class="chip" data-question="{{ question }}">{{ question }}</button>
+  {% endfor %}
+</div>
+<form id="form">
+  <input id="question" placeholder="Ask {{ brand.name }} a question" autocomplete="off"
+         maxlength="1000" required>
+  <button id="send">Ask</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='chat.js') }}"></script>
+{% endblock %}

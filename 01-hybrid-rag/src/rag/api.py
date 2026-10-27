@@ -1,6 +1,9 @@
 """HTTP API and browser chat over each agency's documents.
 
 Run:   uv run serve          then open http://127.0.0.1:8001 (chat) or /docs (API)
+
+Pages are rendered on the server with Jinja2 (templates/): the agency comes from the URL,
+/t/<tenant_id>, the way a real multi-tenant product would use a subdomain.
 Needs Postgres (docker compose up -d in 00-foundations), Ollama, and `uv run ingest`.
 Port 8001, so it can run next to 00-foundations' API on 8000.
 """
@@ -14,24 +17,28 @@ from typing import Annotated
 import httpx
 import psycopg
 import uvicorn
-from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from shared.config import get_settings
 from shared.llm import ChatResult, LLMError, stream_chat
 
 from rag.ask import tenants
+from rag.brand import Brand, brands
 from rag.chunking import Chunk
 from rag.generate import DEFAULT_MODEL, agency_name, answer
 from rag.ingest import PROJECT_DIR, ChunkStore
 from rag.vector import ollama_embedder, vector_searcher
 
-INDEX_HTML = PROJECT_DIR / "static" / "index.html"
-
 app = FastAPI(
     title="Hybrid RAG API",
     description="Ask a letting agency's documents; answers cite their sources.",
 )
+app.mount("/static", StaticFiles(directory=PROJECT_DIR / "static"), name="static")
+# Autoescaping is on for .html templates: {{ value }} can't inject markup into the page.
+templates = Jinja2Templates(directory=PROJECT_DIR / "templates")
 
 Searcher = Callable[[str, str, int], list[Chunk]]
 
@@ -68,9 +75,15 @@ OllamaUp = Annotated[bool, Depends(ollama_is_up)]
 # --- Request shapes ---
 
 
+class QuestionRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    model: str = DEFAULT_MODEL
+
+
 class AskRequest(BaseModel):
-    # In a real product the tenant comes from the logged-in user or the subdomain, never
-    # from the request body: anyone can edit a request. Fine for a local demo.
+    # API clients name the tenant in the body. The pages use /t/{tenant_id}/ask instead, so
+    # the tenant comes from the URL the server rendered. In a real product it would come
+    # from the logged-in user or the subdomain: anyone can edit a request body.
     tenant_id: str
     question: str = Field(min_length=1, max_length=1000)
     model: str = DEFAULT_MODEL
@@ -91,9 +104,34 @@ def database_failure(request: Request, exc: psycopg.Error) -> JSONResponse:
 # --- Endpoints ---
 
 
-@app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(INDEX_HTML)
+def brand_or_404(tenant_id: str) -> Brand:
+    brand = brands().get(tenant_id)
+    if brand is None:
+        raise HTTPException(status_code=404, detail="unknown agency")
+    return brand
+
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(
+        request, "home.html", {"brands": list(brands().values()), "brand": None}
+    )
+
+
+@app.get("/t/{tenant_id}", include_in_schema=False, response_class=HTMLResponse)
+def tenant_chat(request: Request, tenant_id: str):
+    """The chat page for one agency, in its colours, with its example questions."""
+    brand = brands().get(tenant_id)
+    if brand is None:
+        return templates.TemplateResponse(
+            request,
+            "home.html",
+            {"brands": list(brands().values()), "brand": None, "message": "No such agency."},
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request, "chat.html", {"brands": list(brands().values()), "brand": brand}
+    )
 
 
 @app.get("/health")
@@ -117,7 +155,18 @@ def list_tenants() -> list[dict]:
 def ask(body: AskRequest, search: Search, chat: Chat) -> StreamingResponse:
     """Stream Server-Sent Events: `sources` (the retrieved chunks), many `token`s, then
     `done` (which sources were cited, whether it said "I don't know") or `error`."""
-    return StreamingResponse(ask_events(body, search, chat), media_type="text/event-stream")
+    events = ask_events(body.tenant_id, body.question, body.model, search, chat)
+    return StreamingResponse(events, media_type="text/event-stream")
+
+
+@app.post("/t/{tenant_id}/ask")
+def tenant_ask(
+    tenant_id: str, body: QuestionRequest, search: Search, chat: Chat
+) -> StreamingResponse:
+    """Same stream as /ask, for the agency named in the URL (what the chat page uses)."""
+    brand = brand_or_404(tenant_id)
+    events = ask_events(brand.tenant_id, body.question, body.model, search, chat)
+    return StreamingResponse(events, media_type="text/event-stream")
 
 
 # --- Streaming ---
@@ -137,7 +186,7 @@ def source_dict(n: int, chunk: Chunk) -> dict:
 
 
 def ask_events(
-    body: AskRequest, search: Searcher, chat: Callable[..., ChatResult]
+    tenant_id: str, question: str, model: str, search: Searcher, chat: Callable[..., ChatResult]
 ) -> Iterator[str]:
     """Run retrieval + generation in a thread, yielding events as they happen.
 
@@ -149,17 +198,17 @@ def ask_events(
 
     def worker() -> None:
         try:
-            chunks = search(body.question, body.tenant_id, 4)
+            chunks = search(question, tenant_id, 4)
             events.put(
                 sse_event(
                     "sources", {"sources": [source_dict(n, c) for n, c in enumerate(chunks, 1)]}
                 )
             )
             result = answer(
-                body.question,
-                body.tenant_id,
+                question,
+                tenant_id,
                 lambda *_: chunks,
-                model=body.model,
+                model=model,
                 chat=chat,
                 on_token=lambda t: events.put(sse_event("token", {"text": t})),
             )

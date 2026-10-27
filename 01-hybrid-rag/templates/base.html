@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Agency Docs Chat{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+{% if brand %}
+{# Colours are validated hex codes (rag/brand.py): HTML escaping doesn't protect CSS. #}
+<style>:root { --brand: {{ brand.accent }}; --brand-dark: {{ brand.accent_dark }}; }</style>
+{% endif %}
+</head>
+<body{% block body_attrs %}{% endblock %}>
+<div class="app">
+  <header>
+    {% block heading %}{% endblock %}
+    <nav aria-label="Agencies">
+      {% for b in brands %}
+      <a href="{{ url_for('tenant_chat', tenant_id=b.tenant_id) }}"
+         {% if brand and b.tenant_id == brand.tenant_id %}aria-current="page"{% endif %}>{{ b.name }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+  {% block content %}{% endblock %}
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

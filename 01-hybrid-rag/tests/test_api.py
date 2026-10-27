@@ -70,10 +70,84 @@ def events(response) -> list[tuple[str, dict]]:
     return out
 
 
-def test_index_page_is_served(client):
+def test_home_page_links_to_every_agency(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "<title>Agency Docs Chat</title>" in response.text
+    for tenant_id in ("nyumba-homes", "pwani-lettings", "ruaka-rentals"):
+        assert f'href="http://testserver/t/{tenant_id}"' in response.text
+
+
+def test_agency_page_is_rendered_in_its_brand(client):
+    html = client.get("/t/ruaka-rentals").text
+
+    assert "<title>Ruaka Rentals · Ask the agency</title>" in html
+    assert "Affordable bedsitters and family units in Ruaka" in html
+    assert "--brand: #a8501c; --brand-dark: #f0a46c;" in html
+    assert 'data-tenant="ruaka-rentals"' in html
+    assert 'data-question="Can I keep a cat?"' in html  # Ruaka's own example questions
+    assert 'href="http://testserver/t/ruaka-rentals"\n         aria-current="page"' in html
+
+
+def test_unknown_agency_page_is_a_404_that_still_offers_the_real_ones(client):
+    response = client.get("/t/someone-else")
+    assert response.status_code == 404
+    assert "No such agency." in response.text
+    assert "Ruaka Rentals" in response.text
+
+
+def test_static_files_are_served(client):
+    assert "--brand" in client.get("/static/style.css").text
+    assert "document.body.dataset" in client.get("/static/chat.js").text
+
+
+def test_agency_from_the_url_is_the_one_searched(client):
+    stream = events(client.post("/t/pwani-lettings/ask", json={"question": "Dogs?"}))
+    assert stream[-1][0] == "done"
+    assert client.searched == [("Dogs?", "pwani-lettings", 4)]
+
+
+def test_ask_for_an_unknown_agency_in_the_url_is_404_before_any_search(client):
+    response = client.post("/t/someone-else/ask", json={"question": "Dogs?"})
+    assert response.status_code == 404
+    assert client.searched == []
+
+
+def test_every_tenant_folder_has_a_valid_brand():
+    from rag.ask import tenants
+    from rag.brand import brands
+
+    assert list(brands()) == tenants()
+
+
+def test_template_values_are_escaped(client, monkeypatch):
+    from rag import api
+    from rag.brand import Brand
+
+    evil = Brand(
+        tenant_id="evil",
+        name="<script>alert(1)</script>",
+        tagline="x",
+        accent="#000000",
+        accent_dark="#ffffff",
+        examples=['"><img src=x>'],
+    )
+    monkeypatch.setattr(api, "brands", lambda: {"evil": evil})
+    html = client.get("/t/evil").text
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert '"><img src=x>' not in html
+
+
+@pytest.mark.parametrize("colour", ["red", "#12345", "#000000; } body { display: none"])
+def test_brand_colours_must_be_plain_hex_because_css_is_not_escaped(colour):
+    from pydantic import ValidationError
+
+    from rag.brand import Brand
+
+    with pytest.raises(ValidationError):
+        Brand(tenant_id="t", name="T", tagline="", accent=colour, accent_dark="#ffffff")
 
 
 def test_tenants_lists_every_agency_with_a_display_name(client):
