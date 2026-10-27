@@ -1,0 +1,60 @@
+{"id": "nh-01", "tenant": "nyumba-homes", "kind": "direct", "question": "How much is the security deposit?", "source": "tenancy-policy.md", "answer": "two months' rent", "absent": null}
+{"id": "nh-02", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "When will I get my deposit back after I move out?", "source": "tenancy-policy.md", "answer": "within 30 days of moving out", "absent": null}
+{"id": "nh-03", "tenant": "nyumba-homes", "kind": "direct", "question": "When is rent due?", "source": "tenancy-policy.md", "answer": "on or before the 5th day", "absent": null}
+{"id": "nh-04", "tenant": "nyumba-homes", "kind": "exact", "question": "What is the M-Pesa paybill number for rent?", "source": "tenancy-policy.md", "answer": "paybill 400200", "absent": null}
+{"id": "nh-05", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "What happens if my rent is late?", "source": "tenancy-policy.md", "answer": "late fee of 5%", "absent": null}
+{"id": "nh-06", "tenant": "nyumba-homes", "kind": "direct", "question": "What is the notice period to end a tenancy?", "source": "tenancy-policy.md", "answer": "two months' written notice", "absent": null}
+{"id": "nh-07", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "Can I bring my dog?", "source": "tenancy-policy.md", "answer": "considered case by case", "absent": null}
+{"id": "nh-08", "tenant": "nyumba-homes", "kind": "exact", "question": "How much is the pet deposit for a dog?", "source": "tenancy-policy.md", "answer": "KES 10,000", "absent": null}
+{"id": "nh-09", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "Can I rent my flat out on Airbnb while I travel?", "source": "tenancy-policy.md", "answer": "holiday letting", "absent": null}
+{"id": "nh-10", "tenant": "nyumba-homes", "kind": "direct", "question": "What are the viewing hours?", "source": "viewings-and-applications.md", "answer": "Monday to Saturday, from 9am to 5pm", "absent": null}
+{"id": "nh-11", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "Can I see an apartment on a Sunday?", "source": "viewings-and-applications.md", "answer": "no viewings on Sundays", "absent": null}
+{"id": "nh-12", "tenant": "nyumba-homes", "kind": "exact", "question": "What WhatsApp number do I use to book a viewing?", "source": "viewings-and-applications.md", "answer": "+254 700 000 101", "absent": null}
+{"id": "nh-13", "tenant": "nyumba-homes", "kind": "exact", "question": "How much is the application fee?", "source": "viewings-and-applications.md", "answer": "KES 2,000", "absent": null}
+{"id": "nh-14", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "My pipe burst in the middle of the night. Who do I call?", "source": "maintenance.md", "answer": "24-hour emergency line", "absent": null}
+{"id": "nh-15", "tenant": "nyumba-homes", "kind": "direct", "question": "How fast are emergency repairs attended to?", "source": "maintenance.md", "answer": "within four hours", "absent": null}
+{"id": "nh-16", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "Will I have water on days the council supply is off?", "source": "maintenance.md", "answer": "borehole and a storage tank", "absent": null}
+{"id": "nh-17", "tenant": "nyumba-homes", "kind": "paraphrase", "question": "How long is the commute into town from Kilimani?", "source": "area-guide-kilimani.md", "answer": "20 to 40 minutes", "absent": null}
+{"id": "nh-18", "tenant": "nyumba-homes", "kind": "not_in_data", "question": "Is there a swimming pool?", "source": null, "answer": null, "absent": "pool"}
+{"id": "nh-19", "tenant": "nyumba-homes", "kind": "not_in_data", "question": "Can I pay rent quarterly for a discount?", "source": null, "answer": null, "absent": "quarterly"}
+{"id": "nh-20", "tenant": "nyumba-homes", "kind": "not_in_data", "question": "Is parking included with the apartment?", "source": null, "answer": null, "absent": "parking"}
+{"id": "rr-01", "tenant": "ruaka-rentals", "kind": "direct", "question": "How much is the deposit?", "source": "tenancy-policy.md", "answer": "one month's rent", "absent": null}
+{"id": "rr-02", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "How soon do I get my deposit back when I leave?", "source": "tenancy-policy.md", "answer": "within 14 days", "absent": null}
+{"id": "rr-03", "tenant": "ruaka-rentals", "kind": "exact", "question": "What paybill number do I pay rent to?", "source": "tenancy-policy.md", "answer": "paybill 522100", "absent": null}
+{"id": "rr-04", "tenant": "ruaka-rentals", "kind": "exact", "question": "How much is the late fee?", "source": "tenancy-policy.md", "answer": "KES 500 per day", "absent": null}
+{"id": "rr-05", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "How much warning must I give before I move out?", "source": "tenancy-policy.md", "answer": "one month's notice", "absent": null}
+{"id": "rr-06", "tenant": "ruaka-rentals", "kind": "direct", "question": "Are pets allowed?", "source": "tenancy-policy.md", "answer": "No pets are allowed", "absent": null}
+{"id": "rr-07", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "Can I keep a cat in my bedsitter?", "source": "tenancy-policy.md", "answer": "cats, dogs and birds", "absent": null}
+{"id": "rr-08", "tenant": "ruaka-rentals", "kind": "direct", "question": "Can I sublet my unit?", "source": "tenancy-policy.md", "answer": "Subletting is not allowed", "absent": null}
+{"id": "rr-09", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "Do I need to book before coming to see a house?", "source": "viewings-and-applications.md", "answer": "No appointment is needed", "absent": null}
+{"id": "rr-10", "tenant": "ruaka-rentals", "kind": "direct", "question": "What are the viewing times on Sunday?", "source": "viewings-and-applications.md", "answer": "Sundays from 2pm to 5pm", "absent": null}
+{"id": "rr-11", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "Do you charge anything to apply?", "source": "viewings-and-applications.md", "answer": "no application fee", "absent": null}
+{"id": "rr-12", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "How quickly can I move in?", "source": "viewings-and-applications.md", "answer": "approved the same day", "absent": null}
+{"id": "rr-13", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "My tap is leaking. Who do I tell?", "source": "maintenance.md", "answer": "resident caretaker", "absent": null}
+{"id": "rr-14", "tenant": "ruaka-rentals", "kind": "direct", "question": "How quickly are emergency repairs attended to?", "source": "maintenance.md", "answer": "within two hours", "absent": null}
+{"id": "rr-15", "tenant": "ruaka-rentals", "kind": "exact", "question": "How much is the water charge for a one-bedroom?", "source": "maintenance.md", "answer": "KES 600 per month", "absent": null}
+{"id": "rr-16", "tenant": "ruaka-rentals", "kind": "paraphrase", "question": "How long does it take to get to town by matatu?", "source": "area-guide-ruaka.md", "answer": "45 to 75 minutes", "absent": null}
+{"id": "rr-17", "tenant": "ruaka-rentals", "kind": "direct", "question": "What time are the gates locked?", "source": "area-guide-ruaka.md", "answer": "from 11pm to 5am", "absent": null}
+{"id": "rr-18", "tenant": "ruaka-rentals", "kind": "not_in_data", "question": "Is there a holding fee to reserve a unit?", "source": null, "answer": null, "absent": "holding"}
+{"id": "rr-19", "tenant": "ruaka-rentals", "kind": "not_in_data", "question": "Is the air conditioning serviced?", "source": null, "answer": null, "absent": "air conditioning"}
+{"id": "rr-20", "tenant": "ruaka-rentals", "kind": "not_in_data", "question": "Is there a gym in the building?", "source": null, "answer": null, "absent": "gym"}
+{"id": "pl-01", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "How much deposit do I pay for a furnished villa?", "source": "tenancy-policy.md", "answer": "three months' rent for furnished", "absent": null}
+{"id": "pl-02", "tenant": "pwani-lettings", "kind": "direct", "question": "What is the deposit for an unfurnished apartment?", "source": "tenancy-policy.md", "answer": "two months' rent for unfurnished", "absent": null}
+{"id": "pl-03", "tenant": "pwani-lettings", "kind": "direct", "question": "When is the deposit refunded?", "source": "tenancy-policy.md", "answer": "within 45 days", "absent": null}
+{"id": "pl-04", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "Do I save anything by paying in advance?", "source": "tenancy-policy.md", "answer": "3% discount", "absent": null}
+{"id": "pl-05", "tenant": "pwani-lettings", "kind": "exact", "question": "What is the late payment fee?", "source": "tenancy-policy.md", "answer": "10% of the monthly rent", "absent": null}
+{"id": "pl-06", "tenant": "pwani-lettings", "kind": "direct", "question": "What is the notice period for a furnished property?", "source": "tenancy-policy.md", "answer": "three months for furnished", "absent": null}
+{"id": "pl-07", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "Can I bring my dog?", "source": "tenancy-policy.md", "answer": "written approval of the landlord", "absent": null}
+{"id": "pl-08", "tenant": "pwani-lettings", "kind": "direct", "question": "What is the minimum stay for a holiday let?", "source": "tenancy-policy.md", "answer": "minimum stay of seven nights", "absent": null}
+{"id": "pl-09", "tenant": "pwani-lettings", "kind": "direct", "question": "When can I view a property?", "source": "viewings-and-applications.md", "answer": "Monday to Friday from 10am to 4pm", "absent": null}
+{"id": "pl-10", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "I live in Nairobi. Can I see a property without travelling?", "source": "viewings-and-applications.md", "answer": "virtual viewings", "absent": null}
+{"id": "pl-11", "tenant": "pwani-lettings", "kind": "exact", "question": "How much is the holding fee?", "source": "viewings-and-applications.md", "answer": "KES 5,000", "absent": null}
+{"id": "pl-12", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "Why does the application decision take so long?", "source": "viewings-and-applications.md", "answer": "landlord must approve every new tenant", "absent": null}
+{"id": "pl-13", "tenant": "pwani-lettings", "kind": "exact", "question": "What email address do I use to report a repair?", "source": "maintenance.md", "answer": "maintenance@pwanilettings.example", "absent": null}
+{"id": "pl-14", "tenant": "pwani-lettings", "kind": "direct", "question": "How quickly are emergencies attended to?", "source": "maintenance.md", "answer": "within six hours", "absent": null}
+{"id": "pl-15", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "My AC is blowing warm air. What should I do?", "source": "maintenance.md", "answer": "not cooling", "absent": null}
+{"id": "pl-16", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "Who pays when water has to be trucked in?", "source": "maintenance.md", "answer": "shared equally", "absent": null}
+{"id": "pl-17", "tenant": "pwani-lettings", "kind": "paraphrase", "question": "When is it safe to swim at the beach?", "source": "area-guide-nyali.md", "answer": "safest at high tide", "absent": null}
+{"id": "pl-18", "tenant": "pwani-lettings", "kind": "not_in_data", "question": "When is garbage collected?", "source": null, "answer": null, "absent": "garbage"}
+{"id": "pl-19", "tenant": "pwani-lettings", "kind": "not_in_data", "question": "Is there a caretaker on site?", "source": null, "answer": null, "absent": "caretaker"}
+{"id": "pl-20", "tenant": "pwani-lettings", "kind": "not_in_data", "question": "Can I sublet my apartment?", "source": null, "answer": null, "absent": "sublet"}

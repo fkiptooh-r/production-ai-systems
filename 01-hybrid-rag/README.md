@@ -32,9 +32,9 @@ a real test.
 ## Milestones
 
 - [x] **M1 · Ingestion.** Load PDF/Markdown/JSON, clean the text, and chunk it (start with fixed size + overlap, then try splitting by headings). Every chunk stores `tenant_id`, `source`, `page`/`section`, `chunk_id`.
-- [ ] **M2 · Eval set FIRST.** Write 50 questions with their correct answer and the `chunk_id`(s) that contain it. Include some questions whose answers are *not* in the data.
+- [x] **M2 · Eval set FIRST.** Write 50 questions with their correct answer and the `chunk_id`(s) that contain it. Include some questions whose answers are *not* in the data.
   *Deliverable:* `eval/questions.jsonl`
-  *Planned change:* label each question with its tenant, source and an **answer phrase**
+  *Change made:* each question is labelled with its tenant, source and an **answer phrase**
   instead of chunk ids, because chunk ids change whenever the chunking strategy or size
   changes. A retrieved chunk counts as relevant if it's from the right tenant and source
   and contains the phrase.
@@ -59,6 +59,7 @@ uv sync
 uv run pytest                                  # DB tests skip if Postgres isn't running
 uv run ingest                                  # headings strategy (default)
 uv run ingest --strategy fixed --size 80 --overlap 15
+uv run evaluate                                # score a retriever (only "random" so far)
 ```
 
 ## Results
@@ -77,10 +78,42 @@ can mix two topics in one chunk. Which retrieves better is measured from M3 on.
 searched. The coverage test found that, without it, heading words were lost, including the
 agency name, which the body of "The deposit is one month's rent" never mentions.
 
+### M2 · Eval set (60 questions)
+
+[`eval/questions.jsonl`](eval/questions.jsonl), 20 per tenant, one JSON object per line:
+
+```json
+{"id": "rr-07", "tenant": "ruaka-rentals", "kind": "paraphrase",
+ "question": "Can I keep a cat in my bedsitter?",
+ "source": "tenancy-policy.md", "answer": "cats, dogs and birds", "absent": null}
+```
+
+| Kind | n | What it tests | Example |
+|------|---|---------------|---------|
+| `direct` | 17 | Question reuses the document's words | "What are the viewing hours?" |
+| `paraphrase` | 24 | Same meaning, different words (favours vector search) | "Can I rent my flat out on Airbnb?" → "holiday letting" |
+| `exact` | 10 | Numbers, codes, emails (favours keyword search) | "What paybill number do I pay rent to?" → "522100" |
+| `not_in_data` | 9 | No answer exists for this tenant; the right reply is "I don't know" (M7) | "Is there a holding fee?" asked of Ruaka |
+
+**Traps on purpose:** the same question is asked of several agencies with different answers
+("Can I bring my dog?"), and several not-in-data questions *are* answered by another
+agency (Ruaka has no holding fee; Pwani does). A retriever that ignores the tenant scores 0
+on those.
+
+**Metrics** (answerable questions only, `src/rag/evaluate.py`):
+- **Recall@5:** share of questions with a relevant chunk in the top 5. *Did we find it?*
+- **MRR:** mean of 1/rank of the first relevant chunk. *Did we put it near the top?*
+  Rank 1 → 1.0, rank 2 → 0.5, rank 5 → 0.2, not found → 0.
+
+**The exam is tested too** (`tests/test_eval_set.py`): every answer phrase must appear in
+its source document *and* survive chunking whole (headings 120/20, fixed 80/15 and 50/10),
+and every not-in-data term must be absent from that tenant's documents.
+
 ## Results table (fill this in as you go)
 
 | Retrieval setup | Recall@5 | MRR | p50 latency |
 |-----------------|----------|-----|-------------|
+| Random, the floor (headings / fixed) | 0.08 / 0.14 | 0.03 / 0.06 | |
 | Vector only | | | |
 | BM25 only | | | |
 | Hybrid (RRF) | | | |
