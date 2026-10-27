@@ -41,10 +41,5 @@
 - Get consent before recording; don't store audio longer than needed
 - Confirm before any action that changes data (bookings, cancellations)
 
-## Where this goes in your products
-- **House hunting:** book viewings and answer listing questions by voice or phone
-- **E-commerce:** order tracking and support by phone
-- **EdTech:** speaking practice, reading tutors, oral quizzes
-
 ## Resources
 See [docs/RESOURCES.md → Voice Agents](../docs/RESOURCES.md#05--voice-agents).

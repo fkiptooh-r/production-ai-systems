@@ -231,7 +231,7 @@ comparable scales.
 - **When hybrid *does* win:** when keyword search is right on a meaningful share of queries:
   product codes, SKUs, names, error codes, rare jargon. This eval is mostly paraphrased
   questions about prose, which is vector's home ground, and its `exact` questions ask *for*
-  numbers instead of containing them (M4's eval gap). Run hybrid on your e-commerce catalogue,
+  numbers instead of containing them (M4's eval gap). Run hybrid on a product catalogue,
   where people type "SKU-4471" or a brand name, and the result is likely to flip.
 - **Cost:** hybrid latency is vector + keyword run one after the other (~510 ms). Running
   them concurrently would bring it down to roughly the vector time.
@@ -454,11 +454,6 @@ Verified live in Chrome, light and dark mode, all three agencies; `/t/nope` → 
 - Query rewriting / multi-query
 - Extracting filters from natural language ("under 40k, near a school" → structured filters + semantic query)
 - Multilingual queries, if your users mix languages
-
-## Where this goes in your products
-- **E-commerce:** product search that understands both exact SKUs and "comfy running shoes"; a per-store FAQ bot
-- **House hunting:** natural-language listing search with hard filters
-- **EdTech:** "ask your notes" with page citations
 
 ## Resources
 See [docs/RESOURCES.md → Hybrid RAG](../docs/RESOURCES.md#01--hybrid-rag).
