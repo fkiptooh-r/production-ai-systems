@@ -15,10 +15,12 @@ Usage:
   uv run evaluate --searcher vector [--all-tenants]   # uses whatever `uv run ingest` stored
   uv run evaluate --searcher keyword [--mode any|all]
   uv run evaluate --searcher hybrid [--rrf-k 60] [--candidates 20]
+  uv run evaluate --searcher vector+rerank            # also keyword+rerank, hybrid+rerank
   uv run compare [--searchers vector keyword hybrid]  # question by question
 """
 
 import argparse
+import functools
 import json
 import random
 import statistics
@@ -33,6 +35,7 @@ from rag.ingest import PROJECT_DIR, ChunkStore, build_chunks, load_documents
 QUESTIONS_FILE = PROJECT_DIR / "eval" / "questions.jsonl"
 KINDS = ("direct", "paraphrase", "exact", "not_in_data")
 SEARCHERS = ["random", "vector", "keyword", "hybrid"]
+SEARCHERS += [f"{s}+rerank" for s in SEARCHERS[1:]]  # second stage on top of any real search
 
 # search(question, tenant_id, k) -> the k best chunks, best first
 Searcher = Callable[[str, str, int], list[Chunk]]
@@ -142,11 +145,29 @@ def print_report(name: str, report: Report) -> None:
     print(f"\nmissed: {', '.join(report.misses) or 'none'}")
 
 
+@functools.cache
+def _scorer(model: str):
+    """The cross-encoder, loaded once per run even when several searchers rerank."""
+    from rag.rerank import cross_encoder_scorer
+
+    return cross_encoder_scorer(model)
+
+
 def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searcher]:
     """Build a searcher from command-line options. Returns (display name, search function)."""
     if searcher == "random":
         chunks = build_chunks(load_documents(), args.strategy, args.size, args.overlap)
         return f"random ({args.strategy}, {len(chunks)} chunks)", random_searcher(chunks)
+
+    if searcher.endswith("+rerank"):
+        from rag.rerank import reranking_searcher
+
+        name, first_stage = make_searcher(args, searcher.removesuffix("+rerank"))
+        scorer = _scorer(args.rerank_model)
+        search = reranking_searcher(first_stage, scorer, candidates=args.candidates)
+        search("warm-up: load the reranker before timing", "none", 1)
+        model = args.rerank_model.split("/")[-1]
+        return f"{name} + {model} top {args.candidates}", search
 
     store = ChunkStore()
     corpus = store.corpus()
@@ -206,6 +227,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--keyword-weight", type=float, default=1.0, help="hybrid: keyword's vote (vector = 1)"
+    )
+    parser.add_argument(
+        "--rerank-model",
+        default="Xenova/ms-marco-MiniLM-L-6-v2",
+        help="+rerank: any fastembed cross-encoder, e.g. jinaai/jina-reranker-v1-turbo-en",
     )
     random_args = parser.add_argument_group("random only (others use the ingested chunks)")
     random_args.add_argument("--strategy", choices=["headings", "fixed"], default="headings")
