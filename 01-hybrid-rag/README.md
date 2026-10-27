@@ -44,7 +44,7 @@ a real test.
   and duplicate the model runtime we already have.
 - [x] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
 - [x] **M5 · Hybrid.** Combine both with RRF. Measure.
-- [ ] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
+- [x] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
 - [ ] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
 - [ ] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
@@ -66,7 +66,10 @@ uv run evaluate --searcher vector --all-tenants --k 1
 uv run evaluate --searcher keyword [--mode all]  # no Ollama needed
 uv run evaluate --searcher hybrid [--rrf-k 60] [--keyword-weight 1.0]
 uv run compare                                 # vector vs keyword vs hybrid, per question
+uv run compare --k 1 --searchers vector vector+rerank hybrid+rerank
+uv run evaluate --searcher vector+rerank --rerank-model jinaai/jina-reranker-v1-tiny-en
 ```
+Reranker models download on first use into `models/` (gitignored), 80 MB to 570 MB each.
 
 **Look at the data yourself:** connect DBeaver (or any SQL client) to `127.0.0.1:5433`,
 database `ai_systems`, user/password `postgres`/`postgres`, then open
@@ -217,6 +220,42 @@ comparable scales.
 Try it: `uv run compare` (vector vs keyword vs hybrid, question by question), or
 `uv run evaluate --searcher hybrid --rrf-k 10 --keyword-weight 0.5 --k 1`.
 
+### M6 · Reranking with a cross-encoder
+
+The first stage returns its top 20, a cross-encoder scores each (question, chunk) pair
+*together*, and the best k are kept. Five models were tried via `fastembed` (ONNX Runtime on
+CPU, no PyTorch). Headings chunks, tenant filter on:
+
+| Setup | Model size | Recall@1 | MRR@5 | p50 per question |
+|-------|-----------|----------|-------|------------------|
+| **Vector only (no rerank)** | | **0.98** | **0.99** | **~480 ms** |
+| Vector + MiniLM-L-6 (ms-marco) | 80 MB | 0.92 | 0.95 | ~890 ms |
+| Vector + MiniLM-L-12 (ms-marco) | 120 MB | 0.92 | 0.95 | ~1.1 s |
+| Vector + Jina v1 tiny | 130 MB | 0.88 | 0.90 | ~0.8 s |
+| Vector + Jina v1 turbo | 150 MB | 0.78 | 0.86 | ~1.0 s |
+| Vector + **BGE reranker v2-m3** (int8) | 570 MB | **0.98** | | **~7.9 s** |
+| Hybrid + MiniLM-L-6 | 80 MB | 0.92 | 0.95 | ~0.9–1.2 s |
+| Hybrid + BGE v2-m3 (int8) | 570 MB | 0.98 | | ~9.5 s |
+
+**No reranker beat plain vector search; the only one that matched it costs ~16x the time.**
+
+- **Small rerankers made things worse.** MiniLM fixed 3 questions (`rr-09` "book",
+  `nh-17` commute, `rr-11` "charge anything to apply") but demoted 4 that vector had at #1:
+  "My tap is leaking. Who do I tell?" fell to **rank 5**. These models were trained on MS
+  MARCO web-search queries, a different domain, and a first stage at 0.98 leaves almost
+  nothing to fix and plenty to break.
+- **Bigger isn't automatically better:** Jina *turbo* scored lower than Jina *tiny*. Model
+  choice has to be measured on your own data.
+- **BGE v2-m3 is the only one good enough, and it rescues hybrid:** hybrid alone was 0.92
+  at rank 1; hybrid + BGE is 0.98. A strong reranker can clean up a noisy candidate list.
+  But at ~8–9 s per question on this CPU it's not usable for chat.
+- **Verdict for this corpus:** ship **vector search alone** (or with the tenant filter, at
+  0.98 / 0.99 in ~0.5 s). Reranking earns its cost when the first stage is mediocre: big
+  corpora, hundreds of similar chunks, weak keyword-only first stages. On a GPU or with a
+  hosted rerank API, BGE-class models drop to tens of milliseconds and the trade-off changes.
+- **Not built:** using llama3.2 itself as the judge ("is this chunk relevant? yes/no") per
+  candidate. With 20 candidates at ~1 s each on CPU that's ~20 s per question.
+
 ## Results table (fill this in as you go)
 
 | Retrieval setup | Recall@5 | MRR | p50 latency |
@@ -225,7 +264,11 @@ Try it: `uv run compare` (vector vs keyword vs hybrid, question by question), or
 | Vector only (headings / fixed) | 1.00 / 1.00 | 0.99 / 0.97 | ~0.4–1 s |
 | Keyword only (any word, headings) | 0.90 | 0.83 | ~25 ms |
 | Hybrid (RRF, rrf_k 60, equal weights) | 1.00 | 0.95 | ~510 ms |
-| Hybrid + rerank | | | |
+| Vector + rerank (MiniLM-L-6 / BGE v2-m3) | 1.00 / – | 0.95 / – | ~0.9 s / ~7.9 s |
+| Hybrid + rerank (MiniLM-L-6) | 1.00 | 0.95 | ~0.9–1.2 s |
+
+**Winner so far: vector only.** Same top-1 accuracy as the best reranker at a sixteenth of
+the time. Full write-ups for each milestone are above.
 
 ## Done when
 - The results table is filled in and the README explains *why* the winner won
