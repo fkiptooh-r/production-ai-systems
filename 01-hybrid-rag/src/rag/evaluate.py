@@ -13,6 +13,8 @@ Metrics (over answerable questions only; not-in-data questions are for M7's "I d
 Usage:
   uv run evaluate --searcher random [--strategy headings|fixed] [--size 120] [--overlap 20]
   uv run evaluate --searcher vector [--all-tenants]   # uses whatever `uv run ingest` stored
+  uv run evaluate --searcher keyword [--mode any|all]
+  uv run compare                                      # vector vs keyword, question by question
 """
 
 import argparse
@@ -84,6 +86,7 @@ class Report:
     p50_ms: float = 0.0  # median time for one search call
     by_kind: dict[str, tuple[int, float, float]] = field(default_factory=dict)  # n, recall, mrr
     misses: list[str] = field(default_factory=list)  # ids with nothing relevant in the top k
+    ranks: dict[str, int | None] = field(default_factory=dict)  # id -> first relevant rank
 
 
 def _score(ranks: list[int | None]) -> tuple[float, float]:
@@ -112,6 +115,7 @@ def evaluate(search: Searcher, questions: list[Question], k: int = 5) -> Report:
         if kind_ranks:
             report.by_kind[kind] = (len(kind_ranks), *_score(kind_ranks))
     report.misses = [qid for qid, rank in ranks.items() if rank is None]
+    report.ranks = ranks
     return report
 
 
@@ -136,39 +140,87 @@ def print_report(name: str, report: Report) -> None:
     print(f"\nmissed: {', '.join(report.misses) or 'none'}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Score a retriever against the eval set.")
-    parser.add_argument("--searcher", choices=["random", "vector"], default="random")
+def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searcher]:
+    """Build a searcher from command-line options. Returns (display name, search function)."""
+    if searcher == "random":
+        chunks = build_chunks(load_documents(), args.strategy, args.size, args.overlap)
+        return f"random ({args.strategy}, {len(chunks)} chunks)", random_searcher(chunks)
+
+    store = ChunkStore()
+    corpus = store.corpus()
+    if not corpus["chunks"]:
+        raise SystemExit("No chunks stored yet. Run: uv run ingest")
+    scope = "all tenants" if args.all_tenants else "tenant filter"
+
+    if searcher == "keyword":
+        from rag.keyword import keyword_searcher
+
+        search = keyword_searcher(store, mode=args.mode, tenant_filter=not args.all_tenants)
+        return f"keyword-{args.mode} ({corpus['strategy']}, {corpus['chunks']} chunks, {scope})", (
+            search
+        )
+
+    from shared.llm import LLMError
+
+    from rag.vector import ollama_embedder, vector_searcher
+
+    if not corpus["embedded"]:
+        raise SystemExit("No embedded chunks yet. Run: uv run ingest")
+    search = vector_searcher(store, ollama_embedder(), tenant_filter=not args.all_tenants)
+    try:
+        search("warm-up: load the model before timing", "none", 1)
+    except LLMError as exc:
+        raise SystemExit(f"Embedding failed: {exc}") from exc
+    return f"vector ({corpus['strategy']}, {corpus['embedded']} chunks, {scope})", search
+
+
+def _parser(description: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--k", type=int, default=5)
-    random_args = parser.add_argument_group("random only (vector uses the ingested chunks)")
+    parser.add_argument(
+        "--all-tenants", action="store_true", help="search every agency, not just the asker's"
+    )
+    parser.add_argument(
+        "--mode", choices=["any", "all"], default="any", help="keyword: match any or all words"
+    )
+    random_args = parser.add_argument_group("random only (others use the ingested chunks)")
     random_args.add_argument("--strategy", choices=["headings", "fixed"], default="headings")
     random_args.add_argument("--size", type=int, default=120)
     random_args.add_argument("--overlap", type=int, default=20)
-    vector_args = parser.add_argument_group("vector only")
-    vector_args.add_argument(
-        "--all-tenants", action="store_true", help="search every agency, not just the asker's"
-    )
+    return parser
+
+
+def main() -> None:
+    parser = _parser("Score a retriever against the eval set.")
+    parser.add_argument("--searcher", choices=["random", "vector", "keyword"], default="random")
     args = parser.parse_args()
 
-    if args.searcher == "random":
-        chunks = build_chunks(load_documents(), args.strategy, args.size, args.overlap)
-        search = random_searcher(chunks)
-        name = f"random ({args.strategy}, {len(chunks)} chunks)"
-    else:
-        from shared.llm import LLMError
-
-        from rag.vector import ollama_embedder, vector_searcher
-
-        store = ChunkStore()
-        corpus = store.corpus()
-        if not corpus["embedded"]:
-            raise SystemExit("No embedded chunks yet. Run: uv run ingest")
-        search = vector_searcher(store, ollama_embedder(), tenant_filter=not args.all_tenants)
-        try:
-            search("warm-up: load the model before timing", "none", 1)
-        except LLMError as exc:
-            raise SystemExit(f"Embedding failed: {exc}") from exc
-        scope = "all tenants" if args.all_tenants else "tenant filter"
-        name = f"vector ({corpus['strategy']}, {corpus['embedded']} chunks, {scope})"
-
+    name, search = make_searcher(args, args.searcher)
     print_report(name, evaluate(search, load_questions(), args.k))
+
+
+def compare() -> None:
+    """uv run compare: vector vs keyword side by side, listing the questions they disagree on."""
+    args = _parser("Compare vector and keyword search question by question.").parse_args()
+    questions = load_questions()
+    reports = {}
+    for searcher in ("vector", "keyword"):
+        name, search = make_searcher(args, searcher)
+        reports[searcher] = evaluate(search, questions, args.k)
+        print_report(name, reports[searcher])
+        print()
+
+    def show(rank: int | None) -> str:
+        return str(rank) if rank else "-"
+
+    vector, keyword = reports["vector"].ranks, reports["keyword"].ranks
+    print(
+        f"Questions where the rank differs (rank of the first right chunk, - = not in top {args.k})"
+    )
+    print(f"{'id':<6} {'kind':<11} {'vector':>6} {'keyword':>7}  question")
+    for q in questions:
+        if q.answerable and vector[q.id] != keyword[q.id]:
+            print(
+                f"{q.id:<6} {q.kind:<11} {show(vector[q.id]):>6} {show(keyword[q.id]):>7}"
+                f"  {q.question}"
+            )

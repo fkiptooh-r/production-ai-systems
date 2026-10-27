@@ -15,6 +15,7 @@ dependencies = [
 [project.scripts]
 ingest = "rag.ingest:main"
 evaluate = "rag.evaluate:main"
+compare = "rag.evaluate:compare"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
