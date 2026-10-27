@@ -46,8 +46,10 @@
   details p { margin: 6px 0 2px; color: var(--muted); }
   .error { color: var(--warn); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; }
-  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
-          padding: 6px 12px; cursor: pointer; font-size: 14px; }
+  /* Chips are <button>s: override the white text the generic button rule below gives "Ask". */
+  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+          border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 14px;
+          font-weight: 400; }
   .chip:hover { border-color: var(--accent); }
   form { position: sticky; bottom: 0; background: var(--bg); display: flex; gap: 8px; padding: 12px 0 20px; }
   input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
