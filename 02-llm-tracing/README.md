@@ -28,10 +28,5 @@
 - The dashboard shows cost per tenant
 - README includes a "top failure causes" chart from your own data and what you changed because of it
 
-## Where this goes in your products
-- **E-commerce:** per-tenant AI cost tracking, the basis for billing stores for AI usage
-- **House hunting:** see which searches return poor matches and fix them
-- **EdTech:** find where the tutor gives wrong explanations before students do
-
 ## Resources
 See [docs/RESOURCES.md → Tracing](../docs/RESOURCES.md#02--llm-tracing).

@@ -38,10 +38,5 @@
 ## Ethics note
 For grading anything that affects people (student marks, listing removals), keep a human in the loop and let people appeal. Use the judge to triage and assist, not as the final say.
 
-## Where this goes in your products
-- **E-commerce:** check generated product descriptions for accuracy and tone before publishing
-- **House hunting:** flag suspicious or low-quality listings for review
-- **EdTech:** rubric-based feedback on short answers and essays, with teacher review
-
 ## Resources
 See [docs/RESOURCES.md → LLM-as-a-Judge](../docs/RESOURCES.md#03--llm-as-a-judge--evals).

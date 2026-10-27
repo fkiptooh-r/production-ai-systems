@@ -34,10 +34,5 @@
 - A headline you can defend: "**X% cheaper with a Y-point quality drop**", backed by the table
 - Budget limits are enforced and tested
 
-## Where this goes in your products
-- **E-commerce:** AI tiers per store plan (free stores get cheaper models), per-store spending caps
-- **House hunting:** cheap model for filtering, strong model for detailed neighbourhood comparisons
-- **EdTech:** keep AI tutoring affordable at student prices
-
 ## Resources
 See [docs/RESOURCES.md → Model Routing](../docs/RESOURCES.md#04--model-routing--cost).
