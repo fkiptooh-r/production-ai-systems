@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block heading %}
+<h1>Ask the agency<small>Answers come only from each agency's own documents, with sources.</small></h1>
+{% endblock %}
+
+{% block content %}
+<p class="lead">{{ message or "Choose an agency to chat with its tenancy documents." }}</p>
+<div class="cards">
+  {% for b in brands %}
+  <a class="card" style="--brand: {{ b.accent }}; --brand-dark: {{ b.accent_dark }}"
+     href="{{ url_for('tenant_chat', tenant_id=b.tenant_id) }}">
+    <strong>{{ b.name }}</strong>
+    <span>{{ b.tagline }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

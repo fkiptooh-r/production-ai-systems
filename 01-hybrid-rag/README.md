@@ -50,6 +50,9 @@ a real test.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
   *Status:* API and browser chat done (`uv run serve`); **the 2-minute demo video is still
   to record** (script below).
+- [x] **M10 · Server-rendered pages with Jinja2.** Added after M9: the agency moves into the
+  URL (`/t/<tenant_id>`), pages are rendered per agency from `brand.json` (name, tagline,
+  colours, example questions), and the browser can no longer choose the tenant.
 
 ## How to run
 
@@ -364,8 +367,10 @@ search ──► tenant_connection("ruaka-rentals")
 
 | Endpoint | What it does |
 |----------|--------------|
-| `GET /` | The chat page ([`static/index.html`](static/index.html)): agency dropdown, example questions, streamed answers |
-| `GET /tenants` | Agencies for the dropdown |
+| `GET /` | Home page: one card per agency (M10: server-rendered with Jinja2) |
+| `GET /t/{tenant_id}` | That agency's chat page, in its colours, with its example questions (M10) |
+| `POST /t/{tenant_id}/ask` | `{"question"}` → the same stream as `/ask`, for the agency in the URL (M10) |
+| `GET /tenants` | Agencies as JSON, for API clients |
 | `GET /health` | Database and Ollama status (503 if either is down) |
 | `POST /ask` | `{"tenant_id", "question"}` → Server-Sent Events: `sources`, `token`…, then `done` or `error` |
 
@@ -389,10 +394,10 @@ Ollama or DB needed). Verified live: `/health` ok, a Nyumba dog question streame
 answer in ~27 s on CPU, and an unknown tenant got 422.
 
 #### Demo script (2 minutes)
-1. `uv run serve`, open http://127.0.0.1:8001 (10 s).
+1. `uv run serve`, open http://127.0.0.1:8001 and point out the three branded agencies (10 s).
 2. **Ruaka Rentals:** "Can I keep a cat?" → *No*, cites Pets. Expand the source (25 s).
-3. **Switch to Pwani Lettings, same question style:** "Can I bring my dog?" → *with landlord
-   approval*. Same question, different agency, different correct answer (25 s).
+3. **Switch to Pwani Lettings** (note the URL and colours change): "Can I bring my dog?" →
+   *with landlord approval*. Same question, different agency, different answer (25 s).
 4. **"Is there a gym?"** → amber *I don't know* instead of a made-up answer (20 s).
 5. **Ruaka:** "How much is the holding fee?" → *I don't know*, even though Pwani's documents
    have one: tenant isolation (M8) at work (20 s).
@@ -403,6 +408,41 @@ Record with Windows' built-in **Win + Alt + R** (Xbox Game Bar) or OBS, upload t
 as *unlisted*, and link it below.
 
 **Demo video:** *not recorded yet*
+
+### M10 · Server-rendered pages with Jinja2
+
+M9's page was one static HTML file with an agency dropdown, and it sent the tenant in the
+request body. M10 renders the pages on the server instead:
+
+```
+GET /t/ruaka-rentals ──► FastAPI checks the agency exists (404 page if not)
+                     ──► Jinja2 renders templates/chat.html with Ruaka's brand.json:
+                         name, tagline, colours, example questions, data-tenant="ruaka-rentals"
+browser ──POST /t/ruaka-rentals/ask {"question"}──► streams the answer (as in M9)
+```
+
+| File | Role |
+|------|------|
+| [`templates/base.html`](templates/base.html) | Layout: stylesheet, agency colours, the agency menu |
+| [`templates/home.html`](templates/home.html) | Home page: a card per agency (also the 404 page) |
+| [`templates/chat.html`](templates/chat.html) | One agency's chat page |
+| [`static/style.css`](static/style.css), [`static/chat.js`](static/chat.js) | Shared CSS and the streaming chat script (moved out of the HTML) |
+| `data/tenants/<id>/brand.json` | Per-agency branding, validated by [`rag/brand.py`](src/rag/brand.py) |
+
+**What it teaches, and why it matters for your multi-tenant products:**
+- **The tenant comes from the URL the server validated,** not from something the browser
+  chooses. Swap `/t/<id>` for a subdomain (`ruaka.example.com`) and it's how a real
+  multi-tenant SaaS picks the store.
+- **Per-tenant theming without per-tenant code:** add a folder with documents and a
+  `brand.json` and the agency gets its own branded page. A test checks every tenant has one.
+- **Escaping:** Jinja2 escapes `{{ values }}` in HTML automatically (a test renders a
+  `<script>` agency name and checks it comes out as text). It does **not** protect CSS, so
+  colours are validated as plain hex codes (another test tries `#000000; } body {...}`).
+- **No Flask needed:** FastAPI's `Jinja2Templates` gives server-side templates in the same
+  app as the streaming API.
+
+Verified live in Chrome, light and dark mode, all three agencies; `/t/nope` → 404 page.
+22 API tests (10 new for M10).
 
 ## Done when
 - The results table is filled in and the README explains *why* the winner won

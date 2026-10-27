@@ -1,0 +1,13 @@
+{
+  "name": "Ruaka Rentals",
+  "tagline": "Affordable bedsitters and family units in Ruaka",
+  "accent": "#a8501c",
+  "accent_dark": "#f0a46c",
+  "examples": [
+    "Can I keep a cat?",
+    "How much is the late fee?",
+    "Do I need an appointment to view a house?",
+    "When is garbage collected?",
+    "Is there a holding fee?"
+  ]
+}

@@ -1,0 +1,72 @@
+/* --brand and --brand-dark are set per agency by the template (from brand.json). */
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6a66; --line: #e3e1db;
+  --brand: #1f6f5c; --brand-dark: #5cc4a6;
+  --accent: var(--brand); --on-accent: #ffffff;
+  --warn: #8a5a00; --warn-soft: #fbf1dc;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151614; --panel: #1e201d; --text: #ecebe6; --muted: #9b9a94; --line: #30322e;
+    --accent: var(--brand-dark); --on-accent: #151614;
+    --warn: #e8b55a; --warn-soft: #3a2f1a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.app { max-width: 760px; margin: 0 auto; min-height: 100vh; display: flex;
+       flex-direction: column; padding: 0 16px; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+         justify-content: space-between; padding: 20px 0 16px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 18px; margin: 0; }
+h1 small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+input, button { font: inherit; color: inherit; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; }
+nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 8px; font-size: 14px; }
+nav a:hover { color: var(--text); background: var(--panel); }
+nav a[aria-current="page"] { color: var(--on-accent); background: var(--accent); }
+#log { flex: 1; padding: 20px 0; display: flex; flex-direction: column; gap: 16px; }
+.msg { max-width: 88%; padding: 12px 14px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 4px; }
+.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.bot.idk { background: var(--warn-soft); border-color: transparent; }
+.who { font-size: 12px; color: var(--muted); margin-bottom: 4px; white-space: normal; }
+.cite { display: inline-block; min-width: 1.4em; padding: 0 4px; margin: 0 1px; border-radius: 6px;
+        background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+        text-align: center; vertical-align: 2px; }
+.meta { font-size: 12px; color: var(--muted); margin-top: 8px; white-space: normal; }
+.sources { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; white-space: normal; }
+details { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+details.cited { border-color: var(--accent); }
+details.uncited { opacity: .6; }
+summary { cursor: pointer; }
+details p { margin: 6px 0 2px; color: var(--muted); }
+.error { color: var(--warn); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; }
+/* Chips are <button>s: override the white text the generic button rule below gives "Ask". */
+.chip { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+        border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 14px;
+        font-weight: 400; }
+.chip:hover { border-color: var(--accent); }
+form { position: sticky; bottom: 0; background: var(--bg); display: flex; gap: 8px; padding: 12px 0 20px; }
+input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+        border-radius: 10px; padding: 12px; }
+input:focus, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { background: var(--accent); color: var(--on-accent); border: 0; border-radius: 10px;
+         padding: 0 18px; font-weight: 600; cursor: pointer; }
+button:disabled { opacity: .5; cursor: wait; }
+.empty { color: var(--muted); text-align: center; margin-top: 40px; }
+
+/* Home page: one card per agency, each in its own colour. --accent is re-derived on each
+   card because custom properties are computed where declared (on :root, with :root's brand). */
+.card { --accent: var(--brand); }
+@media (prefers-color-scheme: dark) { .card { --accent: var(--brand-dark); } }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; padding: 24px 0; }
+.card { display: block; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--accent);
+        border-radius: 12px; padding: 16px; color: var(--text); text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card strong { display: block; font-size: 17px; margin-bottom: 4px; }
+.card span { color: var(--muted); font-size: 14px; }
+.lead { color: var(--muted); margin: 24px 0 0; }
