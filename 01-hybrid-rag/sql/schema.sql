@@ -23,3 +23,11 @@ CREATE INDEX IF NOT EXISTS chunks_by_tenant ON rag.chunks (tenant_id);
 -- exact scan takes well under a millisecond; an index starts paying off around 10k+ rows.
 CREATE EXTENSION IF NOT EXISTS vector;
 ALTER TABLE rag.chunks ADD COLUMN IF NOT EXISTS embedding vector(768);
+
+-- M4: keyword search with Postgres full-text search. The tsvector holds each chunk's word
+-- stems ("viewings" -> "view") minus stopwords ("the", "is"). GENERATED ... STORED means
+-- Postgres keeps it in sync with section + content automatically, so ingest never touches it.
+ALTER TABLE rag.chunks ADD COLUMN IF NOT EXISTS search tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', section || ' ' || content)) STORED;
+-- GIN: an inverted index (stem -> rows), the classic search-engine structure.
+CREATE INDEX IF NOT EXISTS chunks_search ON rag.chunks USING GIN (search);

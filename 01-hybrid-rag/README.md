@@ -42,7 +42,7 @@ a real test.
   *Change made:* embeddings from **Ollama** (`nomic-embed-text`, 137M params, ~270 MB)
   instead of sentence-transformers, which would pull in PyTorch (1 GB+) on a CPU-only laptop
   and duplicate the model runtime we already have.
-- [ ] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
+- [x] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
 - [ ] **M5 · Hybrid.** Combine both with RRF. Measure.
 - [ ] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
 - [ ] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
@@ -63,7 +63,13 @@ uv run ingest --strategy fixed --size 80 --overlap 15
 uv run evaluate                                # random baseline
 uv run evaluate --searcher vector              # scores whatever `ingest` stored last
 uv run evaluate --searcher vector --all-tenants --k 1
+uv run evaluate --searcher keyword [--mode all]  # no Ollama needed
+uv run compare                                 # vector vs keyword, question by question
 ```
+
+**Look at the data yourself:** connect DBeaver (or any SQL client) to `127.0.0.1:5433`,
+database `ai_systems`, user/password `postgres`/`postgres`, then open
+[`sql/explore.sql`](sql/explore.sql): chunks, embeddings, nearest neighbours, word stems.
 
 ## Results
 
@@ -112,8 +118,6 @@ on those.
 its source document *and* survive chunking whole (headings 120/20, fixed 80/15 and 50/10),
 and every not-in-data term must be absent from that tenant's documents.
 
-## Results table (fill this in as you go)
-
 ### M3 · Vector search (nomic-embed-text + pgvector)
 
 | Setup (tenant filter on unless stated) | Recall@5 | Recall@1 | MRR | p50 latency |
@@ -139,13 +143,46 @@ and every not-in-data term must be absent from that tenant's documents.
   CPU takes ~0.4–1 s; the pgvector lookup over 64 rows is under a millisecond (no index
   needed until ~10k+ rows).
 
+### M4 · Keyword search (Postgres full-text, headings chunks)
+
+| Setup (tenant filter on unless stated) | Recall@5 | Recall@1 | MRR | p50 latency |
+|----------------------------------------|----------|----------|-----|-------------|
+| Keyword, **all** words must match | 0.22 | | 0.22 | ~30 ms |
+| Keyword, **any** word, ranked | 0.90 | 0.78 | 0.83 | ~25 ms |
+| Keyword, any word, all tenants | 0.86 | | 0.67 | ~25 ms |
+| *Vector, for comparison* | *1.00* | *0.98* | *0.99* | *~500 ms* |
+
+By kind (any mode): direct 1.00 / MRR 0.97 · exact 1.00 / 1.00 · **paraphrase 0.79 / 0.66**.
+
+- **"All words" is useless for questions:** 0.22, and **0.00 on paraphrases**. "Can I keep a
+  cat in my bedsitter?" needs one chunk with *keep* + *cat* + *bedsitter*; none has all
+  three. Switching `&` to `|` ("any word, ranked") lifts recall to 0.90.
+- **Keyword fails exactly where words differ:** all 5 misses are paraphrases. "Airbnb" vs
+  "holiday letting", "charge anything to apply" vs "application fee", "Can I bring my dog?"
+  vs Pwani's "Pets are allowed only with ... approval" (*dog* never appears).
+- **But it fixes vector's one miss:** `rr-09` "Do I need to **book**...?" is rank 2 for vector
+  and rank 1 for keyword: the question's stems *need* and *hous* both appear in Ruaka's
+  viewings chunk ("No appointment is need**ed**", "quote the **house** number"). Each method
+  gets right some questions the other gets wrong, and that's the argument for hybrid (M5).
+  Run `uv run compare` for the full list.
+- **~20x faster:** no embedding call, just a GIN-indexed query (~25 ms, mostly connection
+  setup). Vector spends ~500 ms on the CPU embedding the question.
+- **Honest limitation of this eval:** our `exact` questions *ask for* a number ("What's the
+  paybill?") rather than *contain* one, so vector does just as well on them. Keyword's real
+  edge is queries that contain codes, such as a listing reference or "522100", which this
+  eval doesn't yet test. Worth adding before claiming hybrid helps with exact matches.
+
+**How it works:** the `search` column is a generated `tsvector` (word stems, stopwords
+removed, kept in sync by Postgres) with a GIN index. See
+[`sql/explore.sql`](sql/explore.sql) to look at it, and at the embeddings, in DBeaver/psql.
+
 ## Results table (fill this in as you go)
 
 | Retrieval setup | Recall@5 | MRR | p50 latency |
 |-----------------|----------|-----|-------------|
 | Random, the floor (headings / fixed) | 0.08 / 0.14 | 0.03 / 0.06 | |
 | Vector only (headings / fixed) | 1.00 / 1.00 | 0.99 / 0.97 | ~0.4–1 s |
-| BM25 only | | | |
+| Keyword only (any word, headings) | 0.90 | 0.83 | ~25 ms |
 | Hybrid (RRF) | | | |
 | Hybrid + rerank | | | |
 
