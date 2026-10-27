@@ -48,6 +48,8 @@ a real test.
 - [x] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
 - [x] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
+  *Status:* API and browser chat done (`uv run serve`); **the 2-minute demo video is still
+  to record** (script below).
 
 ## How to run
 
@@ -71,7 +73,13 @@ uv run evaluate --searcher vector+rerank --rerank-model jinaai/jina-reranker-v1-
 ```
 Reranker models download on first use into `models/` (gitignored), 80 MB to 570 MB each.
 
-**Chat with an agency's documents** (needs Ollama with `llama3.2:3b` and `nomic-embed-text`):
+**Chat in the browser** (needs Postgres, Ollama with `llama3.2:3b` + `nomic-embed-text`,
+and `uv run ingest` once):
+```bash
+uv run serve        # then open http://127.0.0.1:8001  (API docs: /docs)
+```
+
+**Chat with an agency's documents in the terminal:**
 ```bash
 uv run ask --tenant ruaka-rentals                       # interactive, empty line to quit
 uv run ask --tenant pwani-lettings "Can I bring my dog?"
@@ -348,6 +356,53 @@ search ──► tenant_connection("ruaka-rentals")
   table owner, and never put user text into SQL.
 - **Cost:** two extra statements per search, ~10–20 ms (noise-level next to the ~500 ms
   embedding call). Scores are unchanged: vector Recall@1 0.98, keyword MRR 0.83.
+
+### M9 · API + browser chat
+
+`uv run serve` starts FastAPI on **http://127.0.0.1:8001** (8001 so it can run beside
+00-foundations on 8000).
+
+| Endpoint | What it does |
+|----------|--------------|
+| `GET /` | The chat page ([`static/index.html`](static/index.html)): agency dropdown, example questions, streamed answers |
+| `GET /tenants` | Agencies for the dropdown |
+| `GET /health` | Database and Ollama status (503 if either is down) |
+| `POST /ask` | `{"tenant_id", "question"}` → Server-Sent Events: `sources`, `token`…, then `done` or `error` |
+
+**How the page shows its work:** the retrieved chunks arrive *before* the answer (the
+`sources` event), so what's displayed is exactly what the model read. Citations `[1]` become
+badges; cited sources are highlighted and expandable; "I don't know" answers are shown in
+amber; an answer with no citation gets a warning. Model text is inserted as text, never as
+HTML, so a reply can't inject markup into the page.
+
+**Choices:**
+- Vector search powers it: M3–M6 showed it's the most accurate *and* the fastest of the
+  accurate options.
+- Unknown tenant, empty or overlong question → **422 before any search runs**.
+- Model failure mid-stream → an `error` event (headers are already sent, so no 5xx is possible).
+- **Not production-ready on purpose:** the tenant comes from the request body. In a real
+  product it must come from the logged-in user or the subdomain, never from something the
+  client can edit. Also missing: auth, rate limits, conversation memory.
+
+**Tests:** 12 in [`tests/test_api.py`](tests/test_api.py) with a fake search and model (no
+Ollama or DB needed). Verified live: `/health` ok, a Nyumba dog question streamed a cited
+answer in ~27 s on CPU, and an unknown tenant got 422.
+
+#### Demo script (2 minutes)
+1. `uv run serve`, open http://127.0.0.1:8001 (10 s).
+2. **Ruaka Rentals:** "Can I keep a cat?" → *No*, cites Pets. Expand the source (25 s).
+3. **Switch to Pwani Lettings, same question style:** "Can I bring my dog?" → *with landlord
+   approval*. Same question, different agency, different correct answer (25 s).
+4. **"Is there a gym?"** → amber *I don't know* instead of a made-up answer (20 s).
+5. **Ruaka:** "How much is the holding fee?" → *I don't know*, even though Pwani's documents
+   have one: tenant isolation (M8) at work (20 s).
+6. Close on the README results table: vector won, hybrid and rerankers didn't beat it here,
+   and why (20 s).
+
+Record with Windows' built-in **Win + Alt + R** (Xbox Game Bar) or OBS, upload to YouTube
+as *unlisted*, and link it below.
+
+**Demo video:** *not recorded yet*
 
 ## Done when
 - The results table is filled in and the README explains *why* the winner won
