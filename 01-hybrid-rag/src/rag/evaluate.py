@@ -14,7 +14,8 @@ Usage:
   uv run evaluate --searcher random [--strategy headings|fixed] [--size 120] [--overlap 20]
   uv run evaluate --searcher vector [--all-tenants]   # uses whatever `uv run ingest` stored
   uv run evaluate --searcher keyword [--mode any|all]
-  uv run compare                                      # vector vs keyword, question by question
+  uv run evaluate --searcher hybrid [--rrf-k 60] [--candidates 20]
+  uv run compare [--searchers vector keyword hybrid]  # question by question
 """
 
 import argparse
@@ -31,6 +32,7 @@ from rag.ingest import PROJECT_DIR, ChunkStore, build_chunks, load_documents
 
 QUESTIONS_FILE = PROJECT_DIR / "eval" / "questions.jsonl"
 KINDS = ("direct", "paraphrase", "exact", "not_in_data")
+SEARCHERS = ["random", "vector", "keyword", "hybrid"]
 
 # search(question, tenant_id, k) -> the k best chunks, best first
 Searcher = Callable[[str, str, int], list[Chunk]]
@@ -152,26 +154,41 @@ def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searche
         raise SystemExit("No chunks stored yet. Run: uv run ingest")
     scope = "all tenants" if args.all_tenants else "tenant filter"
 
-    if searcher == "keyword":
+    details = f"({corpus['strategy']}, {corpus['chunks']} chunks, {scope})"
+
+    def keyword() -> Searcher:
         from rag.keyword import keyword_searcher
 
-        search = keyword_searcher(store, mode=args.mode, tenant_filter=not args.all_tenants)
-        return f"keyword-{args.mode} ({corpus['strategy']}, {corpus['chunks']} chunks, {scope})", (
-            search
-        )
+        return keyword_searcher(store, mode=args.mode, tenant_filter=not args.all_tenants)
 
-    from shared.llm import LLMError
+    def vector() -> Searcher:
+        from shared.llm import LLMError
 
-    from rag.vector import ollama_embedder, vector_searcher
+        from rag.vector import ollama_embedder, vector_searcher
 
-    if not corpus["embedded"]:
-        raise SystemExit("No embedded chunks yet. Run: uv run ingest")
-    search = vector_searcher(store, ollama_embedder(), tenant_filter=not args.all_tenants)
-    try:
-        search("warm-up: load the model before timing", "none", 1)
-    except LLMError as exc:
-        raise SystemExit(f"Embedding failed: {exc}") from exc
-    return f"vector ({corpus['strategy']}, {corpus['embedded']} chunks, {scope})", search
+        if not corpus["embedded"]:
+            raise SystemExit("No embedded chunks yet. Run: uv run ingest")
+        search = vector_searcher(store, ollama_embedder(), tenant_filter=not args.all_tenants)
+        try:
+            search("warm-up: load the model before timing", "none", 1)
+        except LLMError as exc:
+            raise SystemExit(f"Embedding failed: {exc}") from exc
+        return search
+
+    if searcher == "keyword":
+        return f"keyword-{args.mode} {details}", keyword()
+    if searcher == "vector":
+        return f"vector {details}", vector()
+
+    from rag.hybrid import hybrid_searcher
+
+    search = hybrid_searcher(
+        [vector(), keyword()],
+        candidates=args.candidates,
+        rrf_k=args.rrf_k,
+        weights=[1.0, args.keyword_weight],
+    )
+    return f"hybrid rrf_k={args.rrf_k} kw={args.keyword_weight} {details}", search
 
 
 def _parser(description: str) -> argparse.ArgumentParser:
@@ -183,6 +200,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode", choices=["any", "all"], default="any", help="keyword: match any or all words"
     )
+    parser.add_argument("--rrf-k", type=int, default=60, help="hybrid: RRF damping constant")
+    parser.add_argument(
+        "--candidates", type=int, default=20, help="hybrid: results taken from each searcher"
+    )
+    parser.add_argument(
+        "--keyword-weight", type=float, default=1.0, help="hybrid: keyword's vote (vector = 1)"
+    )
     random_args = parser.add_argument_group("random only (others use the ingested chunks)")
     random_args.add_argument("--strategy", choices=["headings", "fixed"], default="headings")
     random_args.add_argument("--size", type=int, default=120)
@@ -192,7 +216,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = _parser("Score a retriever against the eval set.")
-    parser.add_argument("--searcher", choices=["random", "vector", "keyword"], default="random")
+    parser.add_argument("--searcher", choices=SEARCHERS, default="random")
     args = parser.parse_args()
 
     name, search = make_searcher(args, args.searcher)
@@ -200,27 +224,35 @@ def main() -> None:
 
 
 def compare() -> None:
-    """uv run compare: vector vs keyword side by side, listing the questions they disagree on."""
-    args = _parser("Compare vector and keyword search question by question.").parse_args()
+    """uv run compare: several searchers side by side, listing the questions they disagree on."""
+    parser = _parser("Compare searchers question by question.")
+    parser.add_argument(
+        "--searchers", nargs="+", choices=SEARCHERS, default=["vector", "keyword", "hybrid"]
+    )
+    args = parser.parse_args()
     questions = load_questions()
+
     reports = {}
-    for searcher in ("vector", "keyword"):
+    for searcher in args.searchers:
         name, search = make_searcher(args, searcher)
         reports[searcher] = evaluate(search, questions, args.k)
-        print_report(name, reports[searcher])
-        print()
+        print(
+            f"{name}: Recall@{args.k} {reports[searcher].recall:.2f}"
+            f" | MRR {reports[searcher].mrr:.2f} | p50 {reports[searcher].p50_ms:.0f} ms"
+        )
 
     def show(rank: int | None) -> str:
         return str(rank) if rank else "-"
 
-    vector, keyword = reports["vector"].ranks, reports["keyword"].ranks
-    print(
-        f"Questions where the rank differs (rank of the first right chunk, - = not in top {args.k})"
-    )
-    print(f"{'id':<6} {'kind':<11} {'vector':>6} {'keyword':>7}  question")
+    print(f"\nQuestions where the ranks differ (first right chunk; - = not in top {args.k})")
+    print(f"{'id':<6} {'kind':<11}" + "".join(f"{s:>9}" for s in args.searchers) + "  question")
     for q in questions:
-        if q.answerable and vector[q.id] != keyword[q.id]:
+        if not q.answerable:
+            continue
+        ranks = [reports[s].ranks[q.id] for s in args.searchers]
+        if len(set(ranks)) > 1:
             print(
-                f"{q.id:<6} {q.kind:<11} {show(vector[q.id]):>6} {show(keyword[q.id]):>7}"
-                f"  {q.question}"
+                f"{q.id:<6} {q.kind:<11}"
+                + "".join(f"{show(r):>9}" for r in ranks)
+                + f"  {q.question}"
             )
