@@ -9,6 +9,8 @@ Embedding each chunk (M3) needs Ollama with nomic-embed-text; --skip-embed store
 
 import argparse
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,7 +44,21 @@ class ChunkStore:
         self.url = url or get_settings().database_url
 
     def connect(self) -> psycopg.Connection:
+        """Full access (as the table owner): for ingest and admin work, never for searches."""
         return psycopg.connect(self.url, row_factory=dict_row, connect_timeout=3)
+
+    @contextmanager
+    def tenant_connection(self, tenant_id: str) -> Iterator[psycopg.Connection]:
+        """A connection that can only read one tenant's chunks, enforced by Postgres RLS.
+
+        Inside one transaction: switch to the read-only rag_reader role (which RLS applies
+        to) and set app.tenant_id. Both are LOCAL, so they end with the transaction and
+        can't leak into whatever uses the connection next.
+        """
+        with self.connect() as conn, conn.transaction():
+            conn.execute("SET LOCAL ROLE rag_reader")
+            conn.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+            yield conn
 
     def is_up(self) -> bool:
         try:

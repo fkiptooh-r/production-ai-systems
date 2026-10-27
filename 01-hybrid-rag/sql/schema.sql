@@ -31,3 +31,24 @@ ALTER TABLE rag.chunks ADD COLUMN IF NOT EXISTS search tsvector
     GENERATED ALWAYS AS (to_tsvector('english', section || ' ' || content)) STORED;
 -- GIN: an inverted index (stem -> rows), the classic search-engine structure.
 CREATE INDEX IF NOT EXISTS chunks_search ON rag.chunks USING GIN (search);
+
+-- M8: tenant isolation enforced by the database, not just by the app's WHERE clause.
+-- Searches run as rag_reader, which may only SELECT, and Row-Level Security (RLS) hides
+-- every row whose tenant_id isn't the one set for the transaction in app.tenant_id.
+-- Why a separate role: superusers and the table owner (postgres here) BYPASS RLS, so
+-- ingest keeps working as postgres while every search is filtered.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'rag_reader') THEN
+        CREATE ROLE rag_reader NOLOGIN;  -- no password: only reachable via SET ROLE
+    END IF;
+END $$;
+GRANT USAGE ON SCHEMA rag TO rag_reader;
+GRANT SELECT ON rag.chunks TO rag_reader;  -- read only: no INSERT, UPDATE or DELETE
+
+ALTER TABLE rag.chunks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON rag.chunks;
+-- current_setting(..., true) returns NULL when unset, and `tenant_id = NULL` is never true:
+-- forgetting to set the tenant shows zero rows (fails closed) instead of all of them.
+CREATE POLICY tenant_isolation ON rag.chunks FOR SELECT TO rag_reader
+    USING (tenant_id = current_setting('app.tenant_id', true));

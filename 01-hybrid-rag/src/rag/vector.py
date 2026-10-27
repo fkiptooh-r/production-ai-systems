@@ -62,22 +62,22 @@ def embed_chunks(store: ChunkStore, embedder: Embedder, batch_size: int = 16) ->
 
 
 def vector_searcher(
-    store: ChunkStore, embedder: Embedder, *, tenant_filter: bool = True
+    store: ChunkStore, embedder: Embedder
 ) -> Callable[[str, str, int], list[Chunk]]:
-    """search(question, tenant_id, k) -> the k nearest chunks, nearest first.
+    """search(question, tenant_id, k) -> the k nearest chunks of that tenant, nearest first.
 
-    tenant_filter=False searches every agency's chunks: useful once, to measure how often
-    another tenant's near-identical policy outranks the right one.
+    Two layers keep tenants apart: the WHERE clause below, and Row-Level Security on the
+    tenant connection, which holds even if a future edit drops the WHERE clause (M8).
     """
-    where = "embedding IS NOT NULL" + (" AND tenant_id = %(tenant)s" if tenant_filter else "")
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
         [vector] = embedder([QUERY_PREFIX + question])
-        with store.connect() as conn:
+        with store.tenant_connection(tenant_id) as conn:
             rows = conn.execute(
-                f"""
+                """
                 SELECT tenant_id, source, section, chunk_index, content
-                FROM rag.chunks WHERE {where}
+                FROM rag.chunks
+                WHERE embedding IS NOT NULL AND tenant_id = %(tenant)s
                 ORDER BY embedding <=> %(vector)s::vector
                 LIMIT %(k)s
                 """,

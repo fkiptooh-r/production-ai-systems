@@ -12,7 +12,7 @@ Metrics (over answerable questions only; not-in-data questions are for M7's "I d
 
 Usage:
   uv run evaluate --searcher random [--strategy headings|fixed] [--size 120] [--overlap 20]
-  uv run evaluate --searcher vector [--all-tenants]   # uses whatever `uv run ingest` stored
+  uv run evaluate --searcher vector                   # uses whatever `uv run ingest` stored
   uv run evaluate --searcher keyword [--mode any|all]
   uv run evaluate --searcher hybrid [--rrf-k 60] [--candidates 20]
   uv run evaluate --searcher vector+rerank            # also keyword+rerank, hybrid+rerank
@@ -173,14 +173,12 @@ def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searche
     corpus = store.corpus()
     if not corpus["chunks"]:
         raise SystemExit("No chunks stored yet. Run: uv run ingest")
-    scope = "all tenants" if args.all_tenants else "tenant filter"
-
-    details = f"({corpus['strategy']}, {corpus['chunks']} chunks, {scope})"
+    details = f"({corpus['strategy']}, {corpus['chunks']} chunks)"
 
     def keyword() -> Searcher:
         from rag.keyword import keyword_searcher
 
-        return keyword_searcher(store, mode=args.mode, tenant_filter=not args.all_tenants)
+        return keyword_searcher(store, mode=args.mode)
 
     def vector() -> Searcher:
         from shared.llm import LLMError
@@ -189,7 +187,7 @@ def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searche
 
         if not corpus["embedded"]:
             raise SystemExit("No embedded chunks yet. Run: uv run ingest")
-        search = vector_searcher(store, ollama_embedder(), tenant_filter=not args.all_tenants)
+        search = vector_searcher(store, ollama_embedder())
         try:
             search("warm-up: load the model before timing", "none", 1)
         except LLMError as exc:
@@ -215,9 +213,6 @@ def make_searcher(args: argparse.Namespace, searcher: str) -> tuple[str, Searche
 def _parser(description: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--k", type=int, default=5)
-    parser.add_argument(
-        "--all-tenants", action="store_true", help="search every agency, not just the asker's"
-    )
     parser.add_argument(
         "--mode", choices=["any", "all"], default="any", help="keyword: match any or all words"
     )

@@ -52,11 +52,6 @@ def test_tenant_filter_only_returns_that_tenants_chunks():
     assert results and {c.tenant_id for c in results} == {"nyumba-homes"}
 
 
-def test_without_the_filter_other_agencies_leak_in():
-    results = keyword_searcher(store, tenant_filter=False)("deposit", "nyumba-homes", 5)
-    assert len({c.tenant_id for c in results}) > 1
-
-
 def test_no_matching_words_means_no_results():
     assert keyword_searcher(store)("xylophone", "nyumba-homes", 5) == []
 
