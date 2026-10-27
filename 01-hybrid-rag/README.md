@@ -45,7 +45,7 @@ a real test.
 - [x] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
 - [x] **M5 · Hybrid.** Combine both with RRF. Measure.
 - [x] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
-- [ ] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
+- [x] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
 - [ ] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
 
@@ -70,6 +70,14 @@ uv run compare --k 1 --searchers vector vector+rerank hybrid+rerank
 uv run evaluate --searcher vector+rerank --rerank-model jinaai/jina-reranker-v1-tiny-en
 ```
 Reranker models download on first use into `models/` (gitignored), 80 MB to 570 MB each.
+
+**Chat with an agency's documents** (needs Ollama with `llama3.2:3b` and `nomic-embed-text`):
+```bash
+uv run ask --tenant ruaka-rentals                       # interactive, empty line to quit
+uv run ask --tenant pwani-lettings "Can I bring my dog?"
+uv run eval-answers                                     # score all 60 answers (~12 min on CPU)
+uv run eval-answers --limit 5                           # quick check
+```
 
 **Look at the data yourself:** connect DBeaver (or any SQL client) to `127.0.0.1:5433`,
 database `ai_systems`, user/password `postgres`/`postgres`, then open
@@ -269,6 +277,36 @@ CPU, no PyTorch). Headings chunks, tenant filter on:
 
 **Winner so far: vector only.** Same top-1 accuracy as the best reranker at a sixteenth of
 the time. Full write-ups for each milestone are above.
+
+### M7 · Answers with citations (llama3.2:3b, vector top 4, temperature 0)
+
+The model sees the 4 retrieved chunks numbered `[1]`–`[4]`, must cite them after each fact,
+and must reply "I don't know" when they don't contain the answer. All 60 questions, every
+answer saved in [`eval/results/answers.jsonl`](eval/results/answers.jsonl):
+
+| Metric | Result |
+|--------|--------|
+| Correct "I don't know" on not-in-data questions | **7 / 9** |
+| Wrong "I don't know" on answerable questions | **0 / 51** |
+| Cites a chunk that really contains the answer | **48 / 51** |
+| Exact answer phrase in the reply (strict lower bound) | 37 / 51 |
+| p50 time per answer (CPU) | 10.6 s |
+
+The 5 failures, by type:
+- **Right answer, no citation (2):** `rr-09`, `pl-09`. Correct, but the reader can't check it.
+- **Defensible answer, other chunk (1):** `pl-15` "AC blowing warm air" cited the general
+  "how to report" section rather than "Air conditioning".
+- **Made-up answer with a fake citation (2), the dangerous kind:**
+  - `pl-18` "When is garbage collected?" → "*typically weekly… depending on the local
+    council's schedule [1]*", citing Pwani's **Water** section.
+  - `pl-20` "Can I sublet?" → "*Subletting is not permitted under the tenancy policy [1]*",
+    citing Pwani's one-line intro. Pwani's documents never mention subletting; this is the
+    *other* agencies' rule, said with confidence.
+
+**Lesson: a citation is not proof.** A small model can invent a fact and still attach a
+plausible `[1]`. Defences, for later: verify that the cited chunk supports the claim (an
+LLM judge, project 03), and refuse without calling the model when even the best chunk is a
+weak match (a similarity threshold).
 
 ## Done when
 - The results table is filled in and the README explains *why* the winner won

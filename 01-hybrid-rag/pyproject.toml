@@ -17,6 +17,8 @@ dependencies = [
 ingest = "rag.ingest:main"
 evaluate = "rag.evaluate:main"
 compare = "rag.evaluate:compare"
+ask = "rag.ask:main"
+eval-answers = "rag.answer_eval:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
