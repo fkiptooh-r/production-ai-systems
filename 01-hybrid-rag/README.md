@@ -46,7 +46,7 @@ a real test.
 - [x] **M5 · Hybrid.** Combine both with RRF. Measure.
 - [x] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
 - [x] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
-- [ ] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
+- [x] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
 
 ## How to run
@@ -62,7 +62,7 @@ uv run ingest                                  # headings strategy (default) + e
 uv run ingest --strategy fixed --size 80 --overlap 15
 uv run evaluate                                # random baseline
 uv run evaluate --searcher vector              # scores whatever `ingest` stored last
-uv run evaluate --searcher vector --all-tenants --k 1
+uv run evaluate --searcher vector --k 1
 uv run evaluate --searcher keyword [--mode all]  # no Ollama needed
 uv run evaluate --searcher hybrid [--rrf-k 60] [--keyword-weight 1.0]
 uv run compare                                 # vector vs keyword vs hybrid, per question
@@ -307,6 +307,47 @@ The 5 failures, by type:
 plausible `[1]`. Defences, for later: verify that the cited chunk supports the claim (an
 LLM judge, project 03), and refuse without calling the model when even the best chunk is a
 weak match (a similarity threshold).
+
+### M8 · Tenant isolation (two independent layers)
+
+M3–M5 showed why this matters: searching every agency dropped MRR from 0.99 to 0.77, and
+another agency's look-alike deposit section was the 4th-closest chunk to Ruaka's own. Now:
+
+1. **Query layer:** every search has `AND tenant_id = %(tenant)s`, and the switch to turn it
+   off (`tenant_filter=False`, `--all-tenants`) is gone. No code path searches all agencies.
+   (The "all tenants" rows above were measured before M8 and can't be reproduced now. That's
+   intended.)
+2. **Database layer, Postgres Row-Level Security** ([`sql/schema.sql`](sql/schema.sql)):
+   searches run on `store.tenant_connection(tenant_id)`, which switches to the read-only
+   role `rag_reader` and sets `app.tenant_id` for that one transaction. A policy then hides
+   every row of any other tenant, **even from SQL with no WHERE clause at all**.
+
+```
+search ──► tenant_connection("ruaka-rentals")
+             SET LOCAL ROLE rag_reader                       (SELECT only, RLS applies)
+             set_config('app.tenant_id', 'ruaka-rentals')    (ends with the transaction)
+             SELECT ... FROM rag.chunks WHERE tenant_id = ...   ◄─ layer 1
+                        └── RLS: USING (tenant_id = app.tenant_id) ◄─ layer 2
+```
+
+**What [`tests/test_isolation.py`](tests/test_isolation.py) proves** (16 tests, real Postgres):
+- All 60 eval questions, asked of **all 3 tenants**, through vector, keyword and hybrid
+  search (top 20): zero chunks from another tenant.
+- Unfiltered SQL on a tenant connection sees exactly that tenant's rows.
+- **Fails closed:** no tenant set, an unknown or wrongly-cased id, or an injection attempt
+  (`x' OR '1'='1`) all see **0 rows**, never all of them.
+- The tenant connection is **read-only**: DELETE, UPDATE and INSERT are refused.
+- Role and tenant settings end with the transaction, so they can't leak to the next request.
+
+**Gotchas learned:**
+- **Superusers and table owners bypass RLS.** The app connects as `postgres`, so RLS would
+  silently do nothing without switching to `rag_reader`. A test pins this down.
+- **Known limit:** code running *inside* a tenant connection can call `set_config` again and
+  switch tenants (a test documents this too). The defence is that only `tenant_connection`
+  sets it, from a parameter. In production, also connect with a login role that isn't the
+  table owner, and never put user text into SQL.
+- **Cost:** two extra statements per search, ~10–20 ms (noise-level next to the ~500 ms
+  embedding call). Scores are unchanged: vector Recall@1 0.98, keyword MRR 0.83.
 
 ## Done when
 - The results table is filled in and the README explains *why* the winner won

@@ -86,11 +86,3 @@ def test_closest_chunk_comes_first(embedder):
     [top] = vector_searcher(store, embedder)(question, "ruaka-rentals", 1)
     assert top.source == "tenancy-policy.md"
     assert top.section.endswith("Subletting")
-
-
-def test_without_the_filter_other_agencies_leak_in(embedder):
-    # The same question has a different answer at each agency, and their deposit sections
-    # are worded alike, so an unfiltered search mixes them. This is what M8 forbids.
-    search = vector_searcher(store, embedder, tenant_filter=False)
-    results = search("What is the deposit?", "ruaka-rentals", 5)
-    assert len({c.tenant_id for c in results}) > 1

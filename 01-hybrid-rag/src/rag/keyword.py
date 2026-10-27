@@ -25,22 +25,24 @@ QUERIES = {
 
 
 def keyword_searcher(
-    store: ChunkStore, *, mode: str = "any", tenant_filter: bool = True
+    store: ChunkStore, *, mode: str = "any"
 ) -> Callable[[str, str, int], list[Chunk]]:
-    """search(question, tenant_id, k) -> up to k chunks, best match first (may be fewer)."""
+    """search(question, tenant_id, k) -> up to k of that tenant's chunks, best match first.
+
+    Tenant isolation: WHERE clause + Row-Level Security on the tenant connection (M8).
+    """
     if mode not in QUERIES:
         raise ValueError(f"unknown mode {mode!r}; use 'all' or 'any'")
-    tenant = "AND tenant_id = %(tenant)s" if tenant_filter else ""
     sql = f"""
         SELECT tenant_id, source, section, chunk_index, content
         FROM rag.chunks, (SELECT {QUERIES[mode]} AS query) AS q
-        WHERE search @@ q.query {tenant}
+        WHERE search @@ q.query AND tenant_id = %(tenant)s
         ORDER BY ts_rank(search, q.query) DESC, chunk_id
         LIMIT %(k)s
     """
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
-        with store.connect() as conn:
+        with store.tenant_connection(tenant_id) as conn:
             rows = conn.execute(sql, {"question": question, "tenant": tenant_id, "k": k})
             return [row_to_chunk(row) for row in rows.fetchall()]
 
