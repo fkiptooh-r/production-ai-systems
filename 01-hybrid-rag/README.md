@@ -38,10 +38,10 @@ a real test.
   instead of chunk ids, because chunk ids change whenever the chunking strategy or size
   changes. A retrieved chunk counts as relevant if it's from the right tenant and source
   and contains the phrase.
-- [ ] **M3 · Vector search.** Local embeddings with `sentence-transformers` (e.g. a small BGE or MiniLM model), stored in Postgres + pgvector. Measure Recall@5 and MRR.
-  *Planned change:* embeddings from **Ollama** (e.g. `nomic-embed-text`, ~270 MB) instead
-  of sentence-transformers, which would pull in PyTorch (1 GB+) on a CPU-only laptop and
-  duplicate the model runtime we already have.
+- [x] **M3 · Vector search.** Local embeddings with `sentence-transformers` (e.g. a small BGE or MiniLM model), stored in Postgres + pgvector. Measure Recall@5 and MRR.
+  *Change made:* embeddings from **Ollama** (`nomic-embed-text`, 137M params, ~270 MB)
+  instead of sentence-transformers, which would pull in PyTorch (1 GB+) on a CPU-only laptop
+  and duplicate the model runtime we already have.
 - [ ] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
 - [ ] **M5 · Hybrid.** Combine both with RRF. Measure.
 - [ ] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
@@ -55,11 +55,14 @@ Uses the Postgres from 00-foundations (tables go in a separate `rag` schema).
 
 ```bash
 cd ../00-foundations && docker compose up -d && cd ../01-hybrid-rag
+ollama pull nomic-embed-text                   # embedding model, ~270 MB (Ollama must be running)
 uv sync
 uv run pytest                                  # DB tests skip if Postgres isn't running
-uv run ingest                                  # headings strategy (default)
+uv run ingest                                  # headings strategy (default) + embeddings
 uv run ingest --strategy fixed --size 80 --overlap 15
-uv run evaluate                                # score a retriever (only "random" so far)
+uv run evaluate                                # random baseline
+uv run evaluate --searcher vector              # scores whatever `ingest` stored last
+uv run evaluate --searcher vector --all-tenants --k 1
 ```
 
 ## Results
@@ -111,10 +114,37 @@ and every not-in-data term must be absent from that tenant's documents.
 
 ## Results table (fill this in as you go)
 
+### M3 · Vector search (nomic-embed-text + pgvector)
+
+| Setup (tenant filter on unless stated) | Recall@5 | Recall@1 | MRR | p50 latency |
+|----------------------------------------|----------|----------|-----|-------------|
+| Vector, headings (64 chunks) | 1.00 | 0.98 | 0.99 | ~0.4–1 s |
+| Vector, fixed 80/15 (36 chunks) | 1.00 | | 0.97 | ~0.45 s |
+| Vector, headings, **all tenants** | 1.00 | | 0.77 | ~0.7 s |
+
+- **Paraphrases work:** "Can I rent my flat out on Airbnb?" finds "holiday letting" with no
+  shared words. That's what embeddings add over keyword search.
+- **Recall@5 = 1.00 is a ceiling, not a triumph.** With the tenant filter each agency has
+  only 10–22 chunks, so the top 5 covers a quarter to a half of them. **MRR and Recall@1 are
+  the honest metrics here**, and headings (0.99) edges out fixed (0.97): one topic per chunk
+  ranks more cleanly.
+- **Only miss at k=1:** `rr-09` "Do I need to book before coming to see a house?" vs "No
+  appointment is needed". The question's meaning is about *booking*, the answer phrase about
+  *appointments*; a keyword or reranking step should help (M4–M6).
+- **Without the tenant filter MRR drops 0.99 → 0.77:** the three agencies' deposit, pets and
+  notice sections are worded alike, so another agency's chunk often outranks the right one.
+  Retrieval still "finds" it in the top 5, but a model reading the #1 chunk would answer
+  with the wrong agency's policy. That's what M8 makes impossible.
+- **Latency is the embedding call, not the database:** turning the question into a vector on
+  CPU takes ~0.4–1 s; the pgvector lookup over 64 rows is under a millisecond (no index
+  needed until ~10k+ rows).
+
+## Results table (fill this in as you go)
+
 | Retrieval setup | Recall@5 | MRR | p50 latency |
 |-----------------|----------|-----|-------------|
 | Random, the floor (headings / fixed) | 0.08 / 0.14 | 0.03 / 0.06 | |
-| Vector only | | | |
+| Vector only (headings / fixed) | 1.00 / 1.00 | 0.99 / 0.97 | ~0.4–1 s |
 | BM25 only | | | |
 | Hybrid (RRF) | | | |
 | Hybrid + rerank | | | |

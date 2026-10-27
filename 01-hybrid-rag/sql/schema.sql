@@ -17,3 +17,9 @@ CREATE TABLE IF NOT EXISTS rag.chunks (
 
 -- Every search filters by tenant first (M8 makes that mandatory), so index it.
 CREATE INDEX IF NOT EXISTS chunks_by_tenant ON rag.chunks (tenant_id);
+
+-- M3: semantic search with pgvector. 768 = nomic-embed-text's vector size.
+-- NULL until `uv run ingest` embeds the chunk. No vector index (HNSW) yet: with ~100 rows an
+-- exact scan takes well under a millisecond; an index starts paying off around 10k+ rows.
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE rag.chunks ADD COLUMN IF NOT EXISTS embedding vector(768);

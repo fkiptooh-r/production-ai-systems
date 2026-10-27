@@ -43,6 +43,6 @@ def test_switching_strategy_replaces_the_whole_corpus(ingested):
     store.replace_all(fixed, "fixed")
 
     assert sum(row["chunks"] for row in store.stats()) == len(fixed)
-    with store._connect() as conn:
+    with store.connect() as conn:
         strategies = conn.execute("SELECT DISTINCT strategy FROM rag.chunks").fetchall()
     assert strategies == [{"strategy": "fixed"}]
