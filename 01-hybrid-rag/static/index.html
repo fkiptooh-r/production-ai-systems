@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agency Docs Chat</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6a66; --line: #e3e1db;
+    --accent: #1f6f5c; --accent-soft: #e3f1ec; --user: #1f6f5c; --user-text: #ffffff;
+    --warn: #8a5a00; --warn-soft: #fbf1dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614; --panel: #1e201d; --text: #ecebe6; --muted: #9b9a94; --line: #30322e;
+      --accent: #5cc4a6; --accent-soft: #1f3330; --user: #2d6b5b; --user-text: #f3fbf8;
+      --warn: #e8b55a; --warn-soft: #3a2f1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { max-width: 760px; margin: 0 auto; min-height: 100vh; display: flex;
+         flex-direction: column; padding: 0 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+           justify-content: space-between; padding: 20px 0 16px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 18px; margin: 0; }
+  h1 small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  select, input, button { font: inherit; color: inherit; }
+  select { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  #log { flex: 1; padding: 20px 0; display: flex; flex-direction: column; gap: 16px; }
+  .msg { max-width: 88%; padding: 12px 14px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .user { align-self: flex-end; background: var(--user); color: var(--user-text); border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bot.idk { background: var(--warn-soft); border-color: transparent; }
+  .who { font-size: 12px; color: var(--muted); margin-bottom: 4px; white-space: normal; }
+  .cite { display: inline-block; min-width: 1.4em; padding: 0 4px; margin: 0 1px; border-radius: 6px;
+          background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+          text-align: center; vertical-align: 2px; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 8px; white-space: normal; }
+  .sources { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; white-space: normal; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+  details.cited { border-color: var(--accent); }
+  details.uncited { opacity: .6; }
+  summary { cursor: pointer; }
+  details p { margin: 6px 0 2px; color: var(--muted); }
+  .error { color: var(--warn); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; }
+  /* Chips are <button>s: override the white text the generic button rule below gives "Ask". */
+  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+          border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 14px;
+          font-weight: 400; }
+  .chip:hover { border-color: var(--accent); }
+  form { position: sticky; bottom: 0; background: var(--bg); display: flex; gap: 8px; padding: 12px 0 20px; }
+  input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 10px; padding: 12px; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { background: var(--accent); color: var(--panel); border: 0; border-radius: 10px;
+           padding: 0 18px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .empty { color: var(--muted); text-align: center; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Ask the agency<small>Answers come only from the agency's own documents, with sources.</small></h1>
+    <label>Agency <select id="tenant" aria-label="Agency"></select></label>
+  </header>
+
+  <main id="log" aria-live="polite">
+    <p class="empty" id="empty">Pick an agency and ask about deposits, pets, viewings, repairs or the area.</p>
+  </main>
+
+  <div class="chips" id="chips"></div>
+  <form id="form">
+    <input id="question" placeholder="e.g. Can I keep a cat?" autocomplete="off" maxlength="1000" required>
+    <button id="send">Ask</button>
+  </form>
+</div>
+
+<script>
+const EXAMPLES = ["Can I bring my dog?", "How much is the deposit?", "When can I view a property?",
+                  "My tap is leaking. Who do I tell?", "Is there a gym?"];
+const $ = (id) => document.getElementById(id);
+const log = $("log"), form = $("form"), input = $("question"), send = $("send"), tenant = $("tenant");
+
+async function loadTenants() {
+  const list = await (await fetch("/tenants")).json();
+  for (const t of list) tenant.add(new Option(t.name, t.id));
+  for (const q of EXAMPLES) {
+    const chip = document.createElement("button");
+    chip.type = "button"; chip.className = "chip"; chip.textContent = q;
+    chip.onclick = () => { input.value = q; form.requestSubmit(); };
+    $("chips").append(chip);
+  }
+}
+
+function bubble(cls, who) {
+  $("empty")?.remove();
+  const el = document.createElement("div");
+  el.className = `msg ${cls}`;
+  if (who) { const w = document.createElement("div"); w.className = "who"; w.textContent = who; el.append(w); }
+  const body = document.createElement("div");
+  el.append(body);
+  log.append(el);
+  el.scrollIntoView({ block: "end", behavior: "smooth" });
+  return { el, body };
+}
+
+// Render text with [1]-style citations as badges, using text nodes only (never innerHTML).
+function renderAnswer(target, text) {
+  target.replaceChildren();
+  for (const part of text.split(/(\[\d+\])/)) {
+    const m = part.match(/^\[(\d+)\]$/);
+    if (m) { const s = document.createElement("span"); s.className = "cite"; s.textContent = m[1]; target.append(s); }
+    else if (part) target.append(document.createTextNode(part));
+  }
+}
+
+function renderSources(el, sources, cited) {
+  const box = document.createElement("div");
+  box.className = "sources";
+  for (const s of sources) {
+    const d = document.createElement("details");
+    d.className = cited.includes(s.n) ? "cited" : "uncited";
+    const sum = document.createElement("summary");
+    sum.textContent = `[${s.n}] ${s.source} › ${s.section}${cited.includes(s.n) ? "  (cited)" : ""}`;
+    const p = document.createElement("p");
+    p.textContent = s.text;
+    d.append(sum, p);
+    box.append(d);
+  }
+  el.append(box);
+}
+
+// POST + Server-Sent Events: EventSource only does GET, so read the stream by hand.
+async function* sse(response) {
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value;
+    let end;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const raw = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+      const event = raw.match(/^event: (.*)$/m)?.[1];
+      const data = raw.match(/^data: (.*)$/m)?.[1];
+      if (event && data) yield { event, data: JSON.parse(data) };
+    }
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = ""; send.disabled = true;
+  bubble("user").body.textContent = question;
+  const bot = bubble("bot", tenant.options[tenant.selectedIndex].text);
+  bot.body.textContent = "Searching the documents…";
+
+  let text = "", sources = [];
+  try {
+    const response = await fetch("/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenant_id: tenant.value, question }),
+    });
+    if (!response.ok) throw new Error((await response.json()).detail?.[0]?.msg ?? response.statusText);
+    for await (const { event, data } of sse(response)) {
+      if (event === "sources") { sources = data.sources; bot.body.textContent = "Writing the answer…"; }
+      else if (event === "token") { text += data.text; renderAnswer(bot.body, text); }
+      else if (event === "error") throw new Error(data.message);
+      else if (event === "done") {
+        renderAnswer(bot.body, text.trim());
+        if (data.abstained) bot.el.classList.add("idk");
+        else if (!data.cited.length) {
+          const warn = document.createElement("div"); warn.className = "meta error";
+          warn.textContent = "No sources cited: treat this answer with suspicion.";
+          bot.el.append(warn);
+        }
+        if (!data.abstained) renderSources(bot.el, sources, data.cited);
+        const meta = document.createElement("div"); meta.className = "meta";
+        meta.textContent = `${data.seconds}s · searched ${tenant.options[tenant.selectedIndex].text} only`;
+        bot.el.append(meta);
+      }
+      bot.el.scrollIntoView({ block: "end" });
+    }
+  } catch (err) {
+    bot.body.textContent = "";
+    const p = document.createElement("span"); p.className = "error";
+    p.textContent = `Something went wrong: ${err.message}`;
+    bot.body.append(p);
+  } finally {
+    send.disabled = false; input.focus();
+  }
+});
+
+loadTenants();
+</script>
+</body>
+</html>
