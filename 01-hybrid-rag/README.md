@@ -43,7 +43,7 @@ a real test.
   instead of sentence-transformers, which would pull in PyTorch (1 GB+) on a CPU-only laptop
   and duplicate the model runtime we already have.
 - [x] **M4 · Keyword search.** BM25 (`rank_bm25`) or Postgres full-text search. Measure. Notice which questions keyword search wins (names, codes, exact numbers).
-- [ ] **M5 · Hybrid.** Combine both with RRF. Measure.
+- [x] **M5 · Hybrid.** Combine both with RRF. Measure.
 - [ ] **M6 · Rerank.** Retrieve the top 20–50, then rerank with a cross-encoder down to the top 5. Measure. Also measure latency, since reranking costs time.
 - [ ] **M7 · Generation with citations.** Answer only from the retrieved chunks, cite `[source, page]`, and say "I don't know" when the context doesn't contain the answer. Check the not-in-data questions.
 - [ ] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
@@ -64,7 +64,8 @@ uv run evaluate                                # random baseline
 uv run evaluate --searcher vector              # scores whatever `ingest` stored last
 uv run evaluate --searcher vector --all-tenants --k 1
 uv run evaluate --searcher keyword [--mode all]  # no Ollama needed
-uv run compare                                 # vector vs keyword, question by question
+uv run evaluate --searcher hybrid [--rrf-k 60] [--keyword-weight 1.0]
+uv run compare                                 # vector vs keyword vs hybrid, per question
 ```
 
 **Look at the data yourself:** connect DBeaver (or any SQL client) to `127.0.0.1:5433`,
@@ -176,6 +177,46 @@ By kind (any mode): direct 1.00 / MRR 0.97 · exact 1.00 / 1.00 · **paraphrase 
 removed, kept in sync by Postgres) with a GIN index. See
 [`sql/explore.sql`](sql/explore.sql) to look at it, and at the embeddings, in DBeaver/psql.
 
+### M5 · Hybrid search (Reciprocal Rank Fusion)
+
+Each method returns its top 20; RRF scores every chunk `weight / (rrf_k + rank)` per list
+and sorts by the sum. Ranks, not raw scores, because cosine distance and `ts_rank` aren't on
+comparable scales.
+
+| Setup (headings, tenant filter) | Recall@5 | Recall@1 | MRR | p50 latency |
+|---------------------------------|----------|----------|-----|-------------|
+| Vector only | 1.00 | **0.98** | **0.99** | ~480 ms |
+| Keyword only | 0.90 | 0.78 | 0.83 | ~26 ms |
+| **Hybrid, standard RRF** (rrf_k 60, equal weights) | 1.00 | 0.92 | 0.95 | ~510 ms |
+| Hybrid, rrf_k 10, keyword weight 0.5 | 1.00 | 0.94 | 0.96 | ~510 ms |
+| Hybrid, rrf_k 1, keyword weight 0.5 (best found) | 1.00 | 0.96 | 0.98 | ~510 ms |
+| Hybrid, standard RRF, all tenants | 0.94 | | 0.75 | ~530 ms |
+
+**Hybrid did *not* beat vector search on this eval, and that's the finding.**
+
+- **What hybrid fixed:** `rr-09` "Do I need to **book**...?" moved from rank 2 (vector) to
+  rank 1, thanks to keyword's match on *need* and *house*.
+- **What it broke:** 4 paraphrases that vector ranked 1st fell to 2nd–5th (`nh-09` Airbnb,
+  `nh-17` commute, `rr-11` "charge anything to apply", `pl-10` "without travelling").
+  Keyword ranked the wrong chunk 1st for these, and equal-weight RRF let it outvote vector.
+- **Why weights barely helped at first:** each agency has ~21 chunks, so 20 candidates per
+  method means almost *every* chunk is in *both* lists. With rrf_k = 60, rank 1 and rank 4
+  score nearly the same (1/61 vs 1/64), so the fused order is mostly noise from the weaker
+  list. A smaller rrf_k sharpens the top ranks; down-weighting keyword limits the damage.
+- **Why I kept the standard defaults:** the "best found" row was chosen by scoring settings
+  on this same 51-question exam. Choosing settings that way is overfitting: they'd look
+  great here and might not generalise. Tuning needs a separate dev set.
+- **When hybrid *does* win:** when keyword search is right on a meaningful share of queries:
+  product codes, SKUs, names, error codes, rare jargon. This eval is mostly paraphrased
+  questions about prose, which is vector's home ground, and its `exact` questions ask *for*
+  numbers instead of containing them (M4's eval gap). Run hybrid on your e-commerce catalogue,
+  where people type "SKU-4471" or a brand name, and the result is likely to flip.
+- **Cost:** hybrid latency is vector + keyword run one after the other (~510 ms). Running
+  them concurrently would bring it down to roughly the vector time.
+
+Try it: `uv run compare` (vector vs keyword vs hybrid, question by question), or
+`uv run evaluate --searcher hybrid --rrf-k 10 --keyword-weight 0.5 --k 1`.
+
 ## Results table (fill this in as you go)
 
 | Retrieval setup | Recall@5 | MRR | p50 latency |
@@ -183,7 +224,7 @@ removed, kept in sync by Postgres) with a GIN index. See
 | Random, the floor (headings / fixed) | 0.08 / 0.14 | 0.03 / 0.06 | |
 | Vector only (headings / fixed) | 1.00 / 1.00 | 0.99 / 0.97 | ~0.4–1 s |
 | Keyword only (any word, headings) | 0.90 | 0.83 | ~25 ms |
-| Hybrid (RRF) | | | |
+| Hybrid (RRF, rrf_k 60, equal weights) | 1.00 | 0.95 | ~510 ms |
 | Hybrid + rerank | | | |
 
 ## Done when
