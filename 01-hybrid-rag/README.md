@@ -49,10 +49,27 @@ a real test.
 - [x] **M8 · Tenant isolation.** Enforce the tenant filter in the query layer (bonus: Postgres Row-Level Security). Write a test proving tenant A can never retrieve tenant B's chunks.
 - [ ] **M9 · API + demo.** `POST /ask` in FastAPI, plus a minimal UI (Streamlit or a single HTML page). Record a 2-minute demo.
   *Status:* API and browser chat done (`uv run serve`); **the 2-minute demo video is still
-  to record** (script below).
+  to record** (script below). Tracked in #23.
 - [x] **M10 · Server-rendered pages with Jinja2.** Added after M9: the agency moves into the
   URL (`/t/<tenant_id>`), pages are rendered per agency from `brand.json` (name, tagline,
   colours, example questions), and the browser can no longer choose the tenant.
+
+### Advanced track
+
+The core roadmap is done. Each advanced milestone targets a weakness the evals above actually
+measured, and is scored against the same 60 questions so the effect is a number, not a feeling.
+
+| # | Milestone | Targets | Issue |
+|---|-----------|---------|-------|
+| A1 | **Query rewriting.** RAG-Fusion (the LLM writes 3 rephrasings, each is searched, lists merged with M5's RRF) and HyDE (embed a hypothetical answer instead of the question) | Paraphrase misses such as `rr-09` ("book" vs "No appointment is needed") | #25 |
+| A2 | **Corrective RAG.** Grade retrieval before answering: a similarity threshold first, then an LLM grader; weak retrieval → "I don't know" or a retry | The two invented answers with fake citations in M7 (`pl-18`, `pl-20`) | #26 |
+| A3 | **Self-query filters.** Structured output (00 M3) turns parts of the question into source/section filters | Questions that name a topic or document type | #27 |
+| A4 | **Agentic RAG.** `search_documents` becomes a tool in 00 M4's hand-written agent loop; the tenant comes from the caller, never the model | Questions that need two searches or none | #28 |
+| A5 | **Faithfulness eval.** Split answers into claims and check each against the chunk it cites; label ~20 by hand first | M7 showed citations can be faked; bridge to project 03 | #29 |
+
+Further out (reading, not milestones yet): knowledge-graph RAG, RAPTOR (recursive summary trees),
+ColBERT (late interaction) and multimodal RAG. See
+[docs/RESOURCES.md](../docs/RESOURCES.md#01--hybrid-rag).
 
 ## How to run
 
