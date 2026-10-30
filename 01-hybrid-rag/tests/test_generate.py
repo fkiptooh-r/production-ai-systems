@@ -1,5 +1,7 @@
 """Answer generation with a fake model and a fake search: no Ollama, no database."""
 
+import json
+
 from shared.llm import ChatResult
 
 from rag.answer_eval import Judged, summarize
@@ -132,3 +134,20 @@ def test_judging_catches_wrong_citations_and_made_up_answers():
     assert report.grounded == 0  # cited the rent chunk, which doesn't contain the answer
     assert report.correct_abstentions == 0
     assert len(report.failures) == 2
+
+
+def test_answer_is_traced_with_tokens_cost_and_chunk_ids(trace_file):
+    result = answer("Can I keep a cat?", "ruaka-rentals", fake_search, chat=fake_chat("No [1]."))
+    spans = {s["name"]: s for s in map(json.loads, trace_file.read_text("utf-8").splitlines())}
+
+    root, gen = spans["answer"], spans["generate"]
+    assert root["trace_id"] == result.trace_id
+    assert root["parent_id"] is None and gen["parent_id"] == root["span_id"]
+    assert root["attributes"]["tenant_id"] == "ruaka-rentals"
+    assert root["attributes"]["retrieved"] == [PETS.chunk_id, RENT.chunk_id]
+    assert root["attributes"]["cited"] == [PETS.chunk_id]
+    assert root["attributes"]["abstained"] is False
+    assert gen["attributes"]["tokens_in"] == 100
+    assert gen["attributes"]["tokens_out"] == 12
+    assert gen["attributes"]["cost_usd"] == 0.0
+    assert gen["attributes"]["cost_usd_hosted"] == 0.00048  # 100 x $3/M + 12 x $15/M

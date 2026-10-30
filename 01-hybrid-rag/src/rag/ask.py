@@ -67,7 +67,7 @@ def main() -> None:
         if args.show_context:
             for n, chunk in enumerate(result.retrieved, start=1):
                 print(f"  ({n}) {chunk.chunk_id}: {chunk.text[:100]}...")
-        print(f"  ({result.seconds:.1f}s, {result.output_tokens} tokens)")
+        print(f"  ({result.seconds:.1f}s, {result.output_tokens} tokens, trace {result.trace_id})")
 
     if args.question:
         ask(args.question)

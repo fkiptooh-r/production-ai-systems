@@ -97,6 +97,7 @@ def to_record(j: Judged) -> dict:
         "cited": [c.chunk_id for c in j.answer.cited],
         "passed": j.passed,
         "seconds": round(j.answer.seconds, 1),
+        "trace_id": j.answer.trace_id,  # links each scored answer to its trace (M4, M5)
     }
 
 
