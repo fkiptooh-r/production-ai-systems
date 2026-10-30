@@ -1,19 +1,40 @@
 # Workflow & Conventions
 
-## Daily git loop
+## Planning on GitHub
+
+Work is planned and tracked in the open, the way a team would:
+
+| GitHub feature | Used for |
+|----------------|----------|
+| [**Milestones**](https://github.com/fkiptooh-r/production-ai-systems/milestones) | One per project (`00 · Foundations` … `05 · Voice agent`); progress = closed issues + merged PRs |
+| [**Issues**](https://github.com/fkiptooh-r/production-ai-systems/issues) | One per roadmap milestone or task, with a checklist and a "done when". Titles: `NN · MX · name` |
+| **Labels** | `milestone` (roadmap item), `advanced` (beyond the core roadmap), `eval` (measurement), `infra` (CI, Docker, tooling), `blocked` (waiting on something outside the repo), plus `bug` / `documentation` |
+| [**Project board**](https://github.com/users/fkiptooh-r/projects/2) | Todo → In Progress → Done across all projects |
+| **Pull requests** | Every PR closes its issue (`Closes #N`) and fills in the [template](../.github/pull_request_template.md): what changed, results, what I learned, verification |
+
+## Daily loop: issue → branch → PR
 
 ```bash
-git checkout main && git pull            # start from the latest main
-git checkout -b 01/m3-vector-search      # one branch per milestone
+gh issue list --milestone "01 · Hybrid RAG"            # pick the next issue
+gh issue develop 25 --name 01/a1-query-rewriting --checkout   # branch linked to issue #25
 # ... work, test ...
-git add -p                               # review each change before staging
-git commit -m "feat(01): add pgvector search and Recall@5 eval"
-git push -u origin 01/m3-vector-search
-gh pr create --fill                      # open a PR (even working solo)
-gh pr merge --squash --delete-branch     # merge when checks pass
+git add -p                                             # review each change before staging
+git commit -m "feat(01): add RAG-Fusion and HyDE query rewriting"
+git push -u origin 01/a1-query-rewriting
+gh pr create --fill                                    # body starts with "Closes #25"
+gh pr checks --watch                                   # CI must be green
+gh pr merge --squash --delete-branch                   # merging closes #25 and moves it to Done
 ```
 
-Working solo, PRs still matter: each one is a readable record of what you built and why, and it's the same workflow teams use.
+Move the issue to **In Progress** on the board when you start. Something unexpected (a bug, an
+idea for later) gets its own issue instead of growing the current PR.
+
+Working solo, this still matters: each issue + PR pair is a readable record of what was planned,
+what was built, how it was verified and what was learned, and it's the same workflow teams use.
+
+**Stacked PRs:** when one piece of work depends on another unmerged branch, branch from it and
+open the PR against it. Say "Stacked on #N" in the description. When #N merges, GitHub deletes
+its branch and retargets the next PR to `main`.
 
 ## Branch names
 

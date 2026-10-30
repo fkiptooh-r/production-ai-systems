@@ -1,0 +1,44 @@
+name: Milestone / task
+description: A roadmap milestone or a piece of work in one of the projects
+title: "NN · MX · "
+labels: ["milestone"]
+body:
+  - type: dropdown
+    id: project
+    attributes:
+      label: Project
+      options:
+        - 00 · Foundations
+        - 01 · Hybrid RAG
+        - 02 · LLM tracing
+        - 03 · LLM judge
+        - 04 · Model routing
+        - 05 · Voice agent
+        - Repo-wide
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What this delivers and why it matters. Link the roadmap line if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: A checklist of concrete steps.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      value: |
+        - [ ] Tests for the new code pass locally and in CI
+        - [ ] Results (numbers, not adjectives) added to the project README
+        - [ ] README milestone ticked

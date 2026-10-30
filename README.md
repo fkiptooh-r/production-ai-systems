@@ -5,6 +5,8 @@
 Five production-grade AI engineering projects, one core skill each, built in public while learning to ship real LLM systems: **retrieval, observability, evaluation, cost control, and real-time voice.**
 
 > 🚧 **Status:** learning in public. Each project folder has its own roadmap with milestones; progress is tracked in the table below.
+>
+> 📋 **Planned and tracked on GitHub:** [milestones](https://github.com/fkiptooh-r/production-ai-systems/milestones) (one per project), [issues](https://github.com/fkiptooh-r/production-ai-systems/issues) (one per roadmap item) and a [project board](https://github.com/users/fkiptooh-r/projects/2). Every PR closes an issue. See [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ## Why this repo
 
