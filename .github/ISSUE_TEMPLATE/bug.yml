@@ -1,0 +1,32 @@
+name: Bug
+description: Something doesn't work as documented
+labels: ["bug"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Project and command, e.g. `01-hybrid-rag`, `uv run evaluate --searcher hybrid`
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: Paste the exact error text or output.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python / uv version, model (e.g. llama3.2:3b), Docker running?
