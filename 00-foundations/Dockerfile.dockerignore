@@ -1,0 +1,17 @@
+# Ignore rules for 00-foundations/Dockerfile. The build context is the repo root, so paths
+# are relative to the root. Allow-list style: everything is excluded unless listed below,
+# which guarantees _private/, .env files and other projects never end up in the image.
+*
+!shared/
+!00-foundations/
+
+# ...and within those, still drop local and test-only files.
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/tests
+**/.env
+**/.env.*
+00-foundations/eval

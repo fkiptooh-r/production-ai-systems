@@ -21,7 +21,7 @@
   *Deliverable:* "find me a 2-bedroom under 40k" returns real results from your JSON.
 - [x] **M5 · FastAPI service.** `POST /chat` with streaming (Server-Sent Events), `GET /health`, request validation, and tests using `TestClient`.
 - [x] **M6 · Postgres.** Run Postgres in Docker. Store conversations and messages. Write the SQL by hand at least once (CREATE TABLE, INSERT, SELECT with JOIN).
-- [ ] **M7 · Docker + deploy.** `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
+- [ ] **M7 · Docker + deploy.** 🟨 *Dockerfile + compose done and tested locally; cloud deploy pending, see [DEPLOY.md](DEPLOY.md).* `Dockerfile` + `docker-compose.yml` (api + postgres). Deploy to Render, Fly.io or Railway, with secrets set as environment variables on the host.
 - [x] **M8 · CI.** A GitHub Actions workflow that runs `ruff` and `pytest` on every push.
 - [x] **M9 · Extract to `shared/`.** Move the LLM client and config loader into `shared/` so project 01 can reuse them.
 
@@ -42,6 +42,7 @@ uv run extract-eval              # score listing extraction (~2 min on CPU)
 uv run agent "Find me a 2-bedroom under 40k with parking"
 uv run tool-eval --model qwen2.5:1.5b   # score tool choice + arguments (~1 min)
 uv run serve                     # API at http://localhost:8000, try it at /docs
+docker compose --profile api up -d --build   # or: the production image + Postgres in Docker
 ```
 
 ### API
