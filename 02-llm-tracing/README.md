@@ -42,7 +42,8 @@ Traces go to `traces/traces.jsonl` (gitignored); set `TRACE_FILE` to write elsew
 ```python
 from tracing.tracer import set_attribute, traced
 
-@traced                         # span named after the function
+
+@traced  # span named after the function
 def vector_search(vector, tenant_id, k=5):
     set_attribute("tenant_id", tenant_id)
     ...
