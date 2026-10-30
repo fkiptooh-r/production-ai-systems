@@ -64,6 +64,19 @@ How to use this list: don't read everything up front. Read the ⭐ item for a mi
 - [Postgres Row-Level Security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html): for tenant isolation (M8)
 - [Ragas docs](https://docs.ragas.io/): RAG evaluation metrics (use after you've written your own)
 
+**Advanced track (A1–A5) and beyond**
+- ⭐ [LangChain, RAG From Scratch](https://www.youtube.com/playlist?list=PLfaIDFEXuae2LXbO1_PKyVJiQ23ZztA0x) (Lance Martin): short videos from indexing to multi-query, RAG-Fusion, HyDE, routing and query construction. Watch alongside A1 and A3
+- [DeepLearning.AI, Retrieval Augmented Generation](https://www.deeplearning.ai/courses/retrieval-augmented-generation-rag/) (Zain Hasan): a five-module course, free to audit; the same site has short courses on agentic and knowledge-graph RAG
+- HyDE: Gao et al. (2022), *"Precise Zero-Shot Dense Retrieval without Relevance Labels"* (A1)
+- RAG-Fusion: Raudaschl (2023), *"Forget RAG, the Future is RAG-Fusion"* (A1; it's RRF over rewritten queries)
+- Corrective RAG: Yan et al. (2024), *"Corrective Retrieval Augmented Generation"* (A2)
+- Self-RAG: Asai et al. (2023), *"Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection"* (A2, A5)
+- RAPTOR: Sarthi et al. (2024), *"RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval"* (later)
+- ColBERT: Khattab & Zaharia (2020), *"ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT"* (later)
+- GraphRAG: Edge et al. (2024), *"From Local to Global: A Graph RAG Approach to Query-Focused Summarization"* (later)
+
+Search the paper titles on arXiv; each has a short abstract that's worth reading before the code.
+
 ---
 
 ## 02 · LLM Tracing
