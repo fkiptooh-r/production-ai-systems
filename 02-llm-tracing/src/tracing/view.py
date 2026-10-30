@@ -3,6 +3,7 @@
 uv run trace-view              # the most recent trace
 uv run trace-view --list       # one line per trace: id, root span, duration, errors
 uv run trace-view 7f3a         # a trace by id (a unique prefix is enough)
+uv run trace-view --stats      # p50/p95 latency per step, tokens and cost per tenant
 """
 
 import argparse
@@ -61,10 +62,45 @@ def summary(trace_id: str, spans: list[dict]) -> str:
     )
 
 
+def percentile(values: list[float], p: float) -> float:
+    """Nearest-rank percentile: p50 is the median, p95 the value 95% of calls stay under."""
+    ordered = sorted(values)
+    return ordered[max(0, min(len(ordered) - 1, round(p / 100 * len(ordered)) - 1))]
+
+
+def stats(traces: dict[str, list[dict]]) -> list[str]:
+    """Per step: calls, errors, p50/p95 latency. Then tokens and cost per tenant."""
+    durations: dict[str, list[float]] = defaultdict(list)
+    errors: dict[str, int] = defaultdict(int)
+    tenants: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for spans in traces.values():
+        tenant = next(
+            (s["attributes"]["tenant_id"] for s in spans if "tenant_id" in s["attributes"]), "-"
+        )
+        for s in spans:
+            durations[s["name"]].append(s["duration_ms"])
+            errors[s["name"]] += s["status"] == "error"
+            for key in ("tokens_in", "tokens_out", "cost_usd", "cost_usd_hosted"):
+                tenants[tenant][key] += s["attributes"].get(key, 0)
+    lines = [f"{'step':<16}{'calls':>7}{'errors':>8}{'p50 ms':>10}{'p95 ms':>10}"]
+    for name, values in sorted(durations.items(), key=lambda kv: -percentile(kv[1], 50)):
+        p50, p95 = percentile(values, 50), percentile(values, 95)
+        lines.append(f"{name:<16}{len(values):>7}{errors[name]:>8}{p50:>10.1f}{p95:>10.1f}")
+    lines += ["", f"{'tenant':<16}{'tokens in':>11}{'tokens out':>12}{'cost':>8}{'if hosted':>12}"]
+    for tenant, t in sorted(tenants.items()):
+        if t["tokens_in"] or t["tokens_out"]:
+            lines.append(
+                f"{tenant:<16}{t['tokens_in']:>11.0f}{t['tokens_out']:>12.0f}"
+                f"{t['cost_usd']:>8.2f}{t['cost_usd_hosted']:>12.4f}"
+            )
+    return lines
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Show traces from a JSONL trace file.")
     parser.add_argument("trace_id", nargs="?", help="trace id or unique prefix (default: latest)")
     parser.add_argument("--list", action="store_true", help="list all traces")
+    parser.add_argument("--stats", action="store_true", help="latency per step, cost per tenant")
     parser.add_argument("--file", type=Path, default=None, help="trace file (default: TRACE_FILE)")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252: no tree glyphs
@@ -76,6 +112,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.list:
         for tid, spans in traces.items():
             print(summary(tid, spans))
+        return
+
+    if args.stats:
+        print(f"{len(traces)} traces\n")
+        print("\n".join(stats(traces)))
         return
 
     if args.trace_id:

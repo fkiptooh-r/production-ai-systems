@@ -169,7 +169,10 @@ def test_ask_streams_sources_then_tokens_then_done(client):
     assert "".join(d["text"] for n, d in stream if n == "token").strip() == (
         "No pets are allowed [1]."
     )
-    assert stream[-1] == ("done", {"cited": [1], "abstained": False, "seconds": 0.4})
+    name, done = stream[-1]
+    assert name == "done"
+    assert len(done.pop("trace_id")) == 32
+    assert done == {"cited": [1], "abstained": False, "seconds": 0.4}
     assert client.searched == [("Cats?", "ruaka-rentals", 4)]  # searched once, as that tenant
 
 
@@ -210,3 +213,31 @@ def test_health_reports_each_dependency(client, db, ollama, status):
     response = client.get("/health")
     assert response.status_code == status
     assert response.json()["database"] == ("up" if db else "down")
+
+
+def test_ask_records_one_trace_across_the_worker_thread(client, trace_file):
+    response = client.post("/ask", json={"tenant_id": "ruaka-rentals", "question": "Cats?"})
+    trace_id = events(response)[-1][1]["trace_id"]
+    spans = [json.loads(line) for line in trace_file.read_text("utf-8").splitlines()]
+
+    assert {s["trace_id"] for s in spans} == {trace_id}
+    by_name = {s["name"]: s for s in spans}
+    assert set(by_name) == {"chat_request", "answer", "generate"}
+    assert by_name["chat_request"]["parent_id"] is None
+    assert by_name["chat_request"]["attributes"]["tenant_id"] == "ruaka-rentals"
+    assert by_name["answer"]["parent_id"] == by_name["chat_request"]["span_id"]
+    assert by_name["generate"]["parent_id"] == by_name["answer"]["span_id"]
+
+
+def test_model_failure_reports_the_trace_id(client, trace_file):
+    app.dependency_overrides[get_chat] = lambda: broken_chat
+    response = client.post("/ask", json={"tenant_id": "ruaka-rentals", "question": "Cats?"})
+    name, data = events(response)[-1]
+    assert name == "error"
+    failed = [json.loads(line) for line in trace_file.read_text("utf-8").splitlines()]
+    assert {s["name"] for s in failed if s["status"] == "error"} == {
+        "chat_request",
+        "answer",
+        "generate",
+    }
+    assert {s["trace_id"] for s in failed} == {data["trace_id"]}

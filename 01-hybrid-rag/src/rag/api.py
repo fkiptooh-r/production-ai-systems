@@ -8,6 +8,7 @@ Needs Postgres (docker compose up -d in 00-foundations), Ollama, and `uv run ing
 Port 8001, so it can run next to 00-foundations' API on 8000.
 """
 
+import contextvars
 import json
 import queue
 import threading
@@ -24,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from shared.config import get_settings
 from shared.llm import ChatResult, LLMError, stream_chat
+from tracing.tracer import set_attribute, span
 
 from rag.ask import tenants
 from rag.brand import Brand, brands
@@ -197,36 +199,48 @@ def ask_events(
     finished = object()
 
     def worker() -> None:
+        trace_id = None
         try:
-            chunks = search(question, tenant_id, 4)
-            events.put(
-                sse_event(
-                    "sources", {"sources": [source_dict(n, c) for n, c in enumerate(chunks, 1)]}
+            # One trace per request: the search and answer() spans become its children.
+            with span("chat_request", question=question) as request:
+                trace_id = request.trace_id
+                set_attribute("tenant_id", tenant_id)
+                chunks = search(question, tenant_id, 4)
+                events.put(
+                    sse_event(
+                        "sources",
+                        {"sources": [source_dict(n, c) for n, c in enumerate(chunks, 1)]},
+                    )
                 )
-            )
-            result = answer(
-                question,
-                tenant_id,
-                lambda *_: chunks,
-                model=model,
-                chat=chat,
-                on_token=lambda t: events.put(sse_event("token", {"text": t})),
-            )
+                result = answer(
+                    question,
+                    tenant_id,
+                    lambda *_: chunks,
+                    model=model,
+                    chat=chat,
+                    on_token=lambda t: events.put(sse_event("token", {"text": t})),
+                )
             cited = [n for n, c in enumerate(chunks, 1) if c in result.cited]
             done = {
                 "cited": cited,
                 "abstained": result.abstained,
                 "seconds": round(result.seconds, 1),
+                "trace_id": trace_id,  # quote it in a bug report: `uv run trace-view <id>`
             }
             events.put(sse_event("done", done))
         except LLMError as exc:  # headers (200) are already sent, so errors travel as events
-            events.put(sse_event("error", {"message": f"model failure: {exc}"}))
+            message = f"model failure: {exc}"
+            events.put(sse_event("error", {"message": message, "trace_id": trace_id}))
         except psycopg.Error:
-            events.put(sse_event("error", {"message": "database unavailable"}))
+            message = "database unavailable"
+            events.put(sse_event("error", {"message": message, "trace_id": trace_id}))
         finally:
             events.put(finished)
 
-    threading.Thread(target=worker, daemon=True).start()
+    # A new thread starts with an empty context. Copy ours in, so a span opened by the caller
+    # (request middleware, say) is still the parent of everything the worker records.
+    context = contextvars.copy_context()
+    threading.Thread(target=context.run, args=(worker,), daemon=True).start()
     while (item := events.get()) is not finished:
         yield item
 

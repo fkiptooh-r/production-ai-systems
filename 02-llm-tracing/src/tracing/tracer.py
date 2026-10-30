@@ -59,6 +59,11 @@ def trace_file() -> Path:
     return Path(os.environ.get("TRACE_FILE", DEFAULT_TRACE_FILE))
 
 
+def enabled() -> bool:
+    """On by default; TRACING=off still runs spans (ids, timing) but writes nothing."""
+    return os.environ.get("TRACING", "on").lower() not in {"0", "off", "false", "no"}
+
+
 def to_jsonable(value: Any) -> Any:
     """Keep JSON-native values; anything else becomes a truncated repr."""
     if value is None or isinstance(value, bool | int | float):
@@ -73,6 +78,8 @@ def to_jsonable(value: Any) -> Any:
 
 
 def _write(span: Span) -> None:
+    if not enabled():
+        return
     path = trace_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(asdict(span), ensure_ascii=False)

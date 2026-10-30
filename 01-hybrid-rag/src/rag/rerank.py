@@ -13,6 +13,8 @@ so there's no PyTorch. It's downloaded on first use into models/ (gitignored).
 
 from collections.abc import Callable
 
+from tracing.tracer import span
+
 from rag.chunking import Chunk
 from rag.ingest import PROJECT_DIR
 
@@ -35,10 +37,16 @@ def reranking_searcher(first_stage: Searcher, scorer: Scorer, *, candidates: int
     """search(question, tenant_id, k): take `candidates` from first_stage, rescore, keep k."""
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
-        pool = first_stage(question, tenant_id, max(k, candidates))
-        # Score full_text: the heading trail ("... > Pets") is often the strongest clue.
-        scores = scorer(question, [chunk.full_text for chunk in pool])
-        order = sorted(range(len(pool)), key=lambda i: scores[i], reverse=True)  # stable
-        return [pool[i] for i in order[:k]]
+        with span("rerank_search", question=question, k=k, candidates=candidates) as rs:
+            pool = first_stage(question, tenant_id, max(k, candidates))
+            with span("rerank", candidates=len(pool)) as s:
+                # Score full_text: the heading trail ("... > Pets") is often the strongest clue.
+                scores = scorer(question, [chunk.full_text for chunk in pool])
+                order = sorted(range(len(pool)), key=lambda i: scores[i], reverse=True)  # stable
+                kept = [pool[i] for i in order[:k]]
+                # The first stage's output is the "before": M5 asks "did gold survive reranking?"
+                s.output = [c.chunk_id for c in kept]
+            rs.output = s.output
+            return kept
 
     return search

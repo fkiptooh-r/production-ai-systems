@@ -7,6 +7,7 @@
 from collections.abc import Callable
 
 from shared.embeddings import DEFAULT_EMBED_MODEL, embed
+from tracing.tracer import set_attribute, span
 
 from rag.chunking import Chunk
 from rag.ingest import ChunkStore
@@ -71,18 +72,24 @@ def vector_searcher(
     """
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
-        [vector] = embedder([QUERY_PREFIX + question])
-        with store.tenant_connection(tenant_id) as conn:
-            rows = conn.execute(
-                """
-                SELECT tenant_id, source, section, chunk_index, content
-                FROM rag.chunks
-                WHERE embedding IS NOT NULL AND tenant_id = %(tenant)s
-                ORDER BY embedding <=> %(vector)s::vector
-                LIMIT %(k)s
-                """,
-                {"tenant": tenant_id, "vector": to_pgvector(vector), "k": k},
-            ).fetchall()
-        return [row_to_chunk(row) for row in rows]
+        with span("vector_search", question=question, k=k) as s:
+            set_attribute("tenant_id", tenant_id)
+            with span("embed_query", question=question):
+                [vector] = embedder([QUERY_PREFIX + question])
+            with store.tenant_connection(tenant_id) as conn:
+                rows = conn.execute(
+                    """
+                    SELECT tenant_id, source, section, chunk_index, content
+                    FROM rag.chunks
+                    WHERE embedding IS NOT NULL AND tenant_id = %(tenant)s
+                    ORDER BY embedding <=> %(vector)s::vector
+                    LIMIT %(k)s
+                    """,
+                    {"tenant": tenant_id, "vector": to_pgvector(vector), "k": k},
+                ).fetchall()
+            chunks = [row_to_chunk(row) for row in rows]
+            # Chunk ids, not text: M5 asks "was the gold chunk retrieved?"
+            s.output = [c.chunk_id for c in chunks]
+            return chunks
 
     return search

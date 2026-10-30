@@ -13,6 +13,8 @@ No model and no embedding call: one indexed SQL query, a few milliseconds.
 
 from collections.abc import Callable
 
+from tracing.tracer import set_attribute, span
+
 from rag.chunking import Chunk
 from rag.ingest import ChunkStore
 from rag.vector import row_to_chunk
@@ -42,9 +44,13 @@ def keyword_searcher(
     """
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
-        with store.tenant_connection(tenant_id) as conn:
-            rows = conn.execute(sql, {"question": question, "tenant": tenant_id, "k": k})
-            return [row_to_chunk(row) for row in rows.fetchall()]
+        with span("keyword_search", question=question, k=k, mode=mode) as s:
+            set_attribute("tenant_id", tenant_id)
+            with store.tenant_connection(tenant_id) as conn:
+                rows = conn.execute(sql, {"question": question, "tenant": tenant_id, "k": k})
+                chunks = [row_to_chunk(row) for row in rows.fetchall()]
+            s.output = [c.chunk_id for c in chunks]
+            return chunks
 
     return search
 

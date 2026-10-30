@@ -9,13 +9,18 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from shared.costs import estimate_cost
 from shared.llm import ChatResult, stream_chat
+from tracing.tracer import set_attribute, span
 
 from rag.chunking import Chunk
 
 DEFAULT_MODEL = "llama3.2:3b"
 TOP_K = 4  # chunks shown to the model: enough to cover the answer, few enough to stay focused
 I_DONT_KNOW = "I don't know"
+# Ollama is free, so cost_usd is 0. cost_usd_hosted prices the same tokens at a mid-tier hosted
+# model (USD per 1M input/output tokens, the reference used in 00 M2): what this would cost.
+HOSTED_PRICES = (3.0, 15.0)
 
 SYSTEM_PROMPT = """You answer questions from tenants of {agency}, a letting agency.
 
@@ -70,6 +75,7 @@ class Answer:
     seconds: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
+    trace_id: str | None = None  # look it up with `uv run trace-view <id>` in 02-llm-tracing
 
     @property
     def abstained(self) -> bool:
@@ -86,20 +92,41 @@ def answer(
     chat: Chat = stream_chat,
     on_token: Callable[[str], None] = lambda _: None,
 ) -> Answer:
-    chunks = search(question, tenant_id, top_k)
-    result = chat(
-        build_messages(question, tenant_id, chunks),
-        model=model,
-        options={"temperature": 0},  # same question, same answer: needed for a fair eval
-        on_token=on_token,
-    )
-    numbers = cited_numbers(result.text, len(chunks))
-    return Answer(
-        question=question,
-        text=result.text.strip(),
-        retrieved=chunks,
-        cited=[chunks[n - 1] for n in numbers],
-        seconds=result.seconds,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-    )
+    with span("answer", question=question, top_k=top_k) as root:
+        set_attribute("tenant_id", tenant_id)
+        set_attribute("model", model)
+        chunks = search(question, tenant_id, top_k)
+        with span("generate", model=model) as gen:
+            result = chat(
+                build_messages(question, tenant_id, chunks),
+                model=model,
+                options={"temperature": 0},  # same question, same answer: needed for a fair eval
+                on_token=on_token,
+            )
+            gen.output = result.text
+            hosted = estimate_cost(result.input_tokens, result.output_tokens, *HOSTED_PRICES)
+            gen.attributes.update(
+                model=model,
+                tokens_in=result.input_tokens,
+                tokens_out=result.output_tokens,
+                cost_usd=0.0,
+                cost_usd_hosted=round(hosted, 6),
+            )
+        numbers = cited_numbers(result.text, len(chunks))
+        cited = [chunks[n - 1] for n in numbers]
+        root.output = result.text.strip()
+        root.attributes.update(
+            retrieved=[c.chunk_id for c in chunks],
+            cited=[c.chunk_id for c in cited],
+            abstained=is_abstention(result.text),
+        )
+        return Answer(
+            question=question,
+            text=result.text.strip(),
+            retrieved=chunks,
+            cited=cited,
+            seconds=result.seconds,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            trace_id=root.trace_id,
+        )

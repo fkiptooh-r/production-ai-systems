@@ -13,6 +13,7 @@ dependencies = [
     "jinja2>=3.1",
     "psycopg[binary]>=3.3.6",
     "shared",
+    "tracing",
     "uvicorn>=0.54.0",
 ]
 
@@ -36,6 +37,7 @@ dev = [
 
 [tool.uv.sources]
 shared = { path = "../shared", editable = true }
+tracing = { path = "../02-llm-tracing", editable = true }
 
 [tool.ruff]
 line-length = 100

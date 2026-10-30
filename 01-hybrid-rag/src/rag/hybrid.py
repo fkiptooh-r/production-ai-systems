@@ -14,6 +14,8 @@ one of them:
 
 from collections.abc import Callable
 
+from tracing.tracer import span
+
 from rag.chunking import Chunk
 
 Searcher = Callable[[str, str, int], list[Chunk]]
@@ -54,7 +56,12 @@ def hybrid_searcher(
     """
 
     def search(question: str, tenant_id: str, k: int) -> list[Chunk]:
-        rankings = [s(question, tenant_id, max(k, candidates)) for s in searchers]
-        return rrf(rankings, rrf_k, weights)[:k]
+        with span("hybrid_search", question=question, k=k, candidates=candidates) as hs:
+            rankings = [s(question, tenant_id, max(k, candidates)) for s in searchers]
+            with span("fuse", rrf_k=rrf_k, weights=weights) as fs:
+                fused = rrf(rankings, rrf_k, weights)[:k]
+                fs.output = [c.chunk_id for c in fused]
+            hs.output = fs.output
+            return fused
 
     return search

@@ -138,3 +138,10 @@ def test_render_draws_the_tree(trace_path):
     assert lines[0].startswith("parent_step")
     assert lines[1].startswith("├── child")
     assert lines[2].startswith("└── child")
+
+
+def test_tracing_off_keeps_ids_but_writes_nothing(trace_path, monkeypatch):
+    monkeypatch.setenv("TRACING", "off")
+    with span("quiet"):
+        assert current_trace_id() is not None
+    assert not trace_path.exists()

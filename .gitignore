@@ -25,6 +25,7 @@ htmlcov/
 
 # --- Data and models (keep large or private files out of git) ---
 data/raw/
+traces/
 data/private/
 *.db
 *.sqlite
