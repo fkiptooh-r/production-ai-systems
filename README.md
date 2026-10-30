@@ -18,7 +18,7 @@ Calling an LLM API is easy. Making the result **reliable, measurable, affordable
 |---|---------|------------|--------|
 | 00 | [Foundations](00-foundations/) | Python, LLM APIs, FastAPI, Docker, deployment | 🟨 In progress |
 | 01 | [Hybrid RAG search](01-hybrid-rag/) | Hybrid retrieval, reranking, citations, tenant isolation | 🟨 In progress |
-| 02 | [Failure forensics](02-llm-tracing/) | LLM tracing and observability | ⬜ Not started |
+| 02 | [Failure forensics](02-llm-tracing/) | LLM tracing and observability | 🟨 In progress |
 | 03 | [Output arbitration](03-llm-judge/) | LLM-as-a-judge, eval pipelines | ⬜ Not started |
 | 04 | [Cost autopilot](04-model-routing/) | Model routing, caching, budgets | ⬜ Not started |
 | 05 | [Real-time voice agent](05-voice-agent/) | Streaming STT → LLM → TTS, turn-taking | ⬜ Not started |
