@@ -32,6 +32,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from tracing import otel
+
 DEFAULT_TRACE_FILE = Path("traces") / "traces.jsonl"
 MAX_VALUE_CHARS = 500  # inputs/outputs are truncated: a trace is for debugging, not storage
 
@@ -59,9 +61,16 @@ def trace_file() -> Path:
     return Path(os.environ.get("TRACE_FILE", DEFAULT_TRACE_FILE))
 
 
+def mode() -> str:
+    """TRACING=on (default): JSONL, plus OTLP export if configured (see otel.py).
+    TRACING=otlp: export only, no file. TRACING=off: spans still get ids and timing, nothing
+    is written or sent."""
+    value = os.environ.get("TRACING", "on").lower()
+    return "off" if value in {"0", "off", "false", "no"} else value
+
+
 def enabled() -> bool:
-    """On by default; TRACING=off still runs spans (ids, timing) but writes nothing."""
-    return os.environ.get("TRACING", "on").lower() not in {"0", "off", "false", "no"}
+    return mode() != "off"
 
 
 def to_jsonable(value: Any) -> Any:
@@ -78,7 +87,7 @@ def to_jsonable(value: Any) -> Any:
 
 
 def _write(span: Span) -> None:
-    if not enabled():
+    if mode() in {"off", "otlp"}:
         return
     path = trace_file()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,14 +100,23 @@ def _write(span: Span) -> None:
 def span(name: str, **inputs: Any) -> Iterator[Span]:
     """Time a block as a span: `with span("search", k=5) as s: ...`."""
     parent = _current.get()
+    exported = otel.start(name, parent.span_id if parent else None) if enabled() else None
+    if exported is not None:
+        trace_id, span_id = otel.ids(exported)  # one id everywhere: JSONL, trace-view, Langfuse
+        otel.register(span_id, exported)
+    else:
+        trace_id = parent.trace_id if parent else uuid.uuid4().hex
+        span_id = uuid.uuid4().hex[:16]
     s = Span(
         name=name,
-        trace_id=parent.trace_id if parent else uuid.uuid4().hex,
-        span_id=uuid.uuid4().hex[:16],
+        trace_id=trace_id,
+        span_id=span_id,
         parent_id=parent.span_id if parent else None,
         start=datetime.now(UTC).isoformat(timespec="milliseconds"),
         inputs={k: to_jsonable(v) for k, v in inputs.items()},
     )
+    if parent is not None and "tenant_id" in parent.attributes:
+        s.attributes["tenant_id"] = parent.attributes["tenant_id"]  # filter any step by tenant
     token = _current.set(s)
     started = time.perf_counter()
     try:
@@ -109,6 +127,8 @@ def span(name: str, **inputs: Any) -> Iterator[Span]:
     finally:
         s.duration_ms = round((time.perf_counter() - started) * 1000, 3)
         _current.reset(token)
+        if exported is not None:
+            otel.finish(exported, s)
         _write(s)
 
 
