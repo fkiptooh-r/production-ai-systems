@@ -13,17 +13,35 @@ Every answer is saved to eval/results/answers.jsonl for reading by hand.
 
 Usage: uv run eval-answers [--model llama3.2:3b] [--limit 10]
 Slow on CPU: roughly 10-15 s per question, so ~12-15 minutes for all 60.
+
+For failure analysis (02 M4), any question file, searcher and top-k, saved elsewhere:
+  uv run eval-answers --questions eval/hard_questions.jsonl --searcher hybrid+rerank
+      --top-k 4 --out ../02-llm-tracing/data/runs/hard-rerank.jsonl
 """
 
-import argparse
 import json
 import statistics
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from rag.evaluate import Question, is_relevant, load_questions, normalize
-from rag.generate import DEFAULT_MODEL, Answer, answer
+from shared.llm import LLMError
+from tracing.tracer import span
+
+from rag.chunking import Chunk
+from rag.evaluate import (
+    QUESTIONS_FILE,
+    SEARCHERS,
+    Question,
+    _parser,
+    is_relevant,
+    load_questions,
+    make_searcher,
+    normalize,
+)
+from rag.generate import DEFAULT_MODEL, TOP_K, Answer, answer
 from rag.ingest import PROJECT_DIR, ChunkStore
+from rag.vector import row_to_chunk
 
 RESULTS_FILE = PROJECT_DIR / "eval" / "results" / "answers.jsonl"
 
@@ -86,7 +104,21 @@ def summarize(judged: list[Judged]) -> AnswerReport:
     return report
 
 
-def to_record(j: Judged) -> dict:
+def stored_chunks() -> list[Chunk]:
+    """Every chunk currently in the database, i.e. exactly what retrieval searches."""
+    with ChunkStore().connect() as conn:
+        rows = conn.execute(
+            "SELECT tenant_id, source, section, chunk_index, content FROM rag.chunks"
+        ).fetchall()
+    return [row_to_chunk(row) for row in rows]
+
+
+def gold_ids(question: Question, chunks: list[Chunk]) -> list[str]:
+    """Chunks that contain the answer: what retrieval should have found. Empty if unanswerable."""
+    return [c.chunk_id for c in chunks if is_relevant(c, question)]
+
+
+def to_record(j: Judged, gold: list[str] | None = None) -> dict:
     return {
         "id": j.question.id,
         "kind": j.question.kind,
@@ -94,7 +126,11 @@ def to_record(j: Judged) -> dict:
         "question": j.question.question,
         "expected": j.question.answer,
         "answer": j.answer.text,
+        "gold": gold or [],  # for failure analysis: was it retrieved? cited? (02 M4, M5)
+        "retrieved": [c.chunk_id for c in j.answer.retrieved],
         "cited": [c.chunk_id for c in j.answer.cited],
+        "abstained": j.answer.abstained,
+        "grounded": j.grounded,
         "passed": j.passed,
         "seconds": round(j.answer.seconds, 1),
         "trace_id": j.answer.trace_id,  # links each scored answer to its trace (M4, M5)
@@ -102,27 +138,37 @@ def to_record(j: Judged) -> dict:
 
 
 def main() -> None:
-    from rag.vector import ollama_embedder, vector_searcher
-
-    parser = argparse.ArgumentParser(description="Score generated answers.")
+    parser = _parser("Score generated answers.")  # shares the searcher options with evaluate
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--limit", type=int, help="only the first N questions (quick check)")
+    parser.add_argument("--questions", type=Path, default=QUESTIONS_FILE)
+    parser.add_argument("--searcher", choices=SEARCHERS[1:], default="vector")
+    parser.add_argument("--top-k", type=int, default=TOP_K, help="chunks shown to the model")
+    parser.add_argument("--out", type=Path, default=RESULTS_FILE, help="where to save answers")
     args = parser.parse_args()
 
-    questions = load_questions()[: args.limit]
-    search = vector_searcher(ChunkStore(), ollama_embedder())
+    questions = load_questions(args.questions)[: args.limit]
+    name, search = make_searcher(args, args.searcher)
+    print(f"{args.model} · {name} · top {args.top_k} · {len(questions)} questions")
     judged = []
     started = time.perf_counter()
     for n, q in enumerate(questions, start=1):
-        result = answer(q.question, q.tenant, search, model=args.model)
+        # One trace per question, so a model error or timeout still has a trace to look at.
+        with span("eval_question", question_id=q.id, kind=q.kind) as s:
+            try:
+                result = answer(q.question, q.tenant, search, model=args.model, top_k=args.top_k)
+            except LLMError as exc:  # a failure to record, not a reason to stop the run
+                s.status, s.error = "error", f"LLMError: {exc}"
+                result = Answer(question=q.question, text=f"[error] {exc}", retrieved=[])
+            result.trace_id = s.trace_id
         judged.append(Judged(q, result))
         mark = "ok  " if judged[-1].passed else "FAIL"
         print(f"[{n:>2}/{len(questions)}] {mark} {q.id} ({result.seconds:.0f}s) {result.text[:70]}")
 
-    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    RESULTS_FILE.write_text(
-        "".join(json.dumps(to_record(j), ensure_ascii=False) + "\n" for j in judged), "utf-8"
-    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    chunks = stored_chunks()
+    records = [to_record(j, gold_ids(j.question, chunks)) for j in judged]
+    args.out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), "utf-8")
 
     r = summarize(judged)
     print(f"\n{args.model}, {len(judged)} questions in {time.perf_counter() - started:.0f}s")
@@ -133,7 +179,7 @@ def main() -> None:
         print(f"Grounded citation:     {r.grounded}/{r.answerable}")
         print(f"Phrase in answer:      {r.phrase_in_answer}/{r.answerable} (strict lower bound)")
     print(f"p50 answer time:       {r.p50_seconds:.1f}s")
-    print(f"Saved every answer to {RESULTS_FILE.relative_to(PROJECT_DIR)}")
+    print(f"Saved every answer to {args.out}")
     for j in r.failures:
         print(f"\nFAIL {j.question.id} [{j.question.kind}] {j.question.question}")
         print(f"  expected: {j.question.answer or I_DONT_KNOW_HINT}")

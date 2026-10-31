@@ -151,3 +151,10 @@ def test_answer_is_traced_with_tokens_cost_and_chunk_ids(trace_file):
     assert gen["attributes"]["tokens_out"] == 12
     assert gen["attributes"]["cost_usd"] == 0.0
     assert gen["attributes"]["cost_usd_hosted"] == 0.00048  # 100 x $3/M + 12 x $15/M
+
+
+def test_gold_ids_are_the_chunks_holding_the_answer():
+    from rag.answer_eval import gold_ids
+
+    assert gold_ids(question(), [PETS, RENT]) == [PETS.chunk_id]
+    assert gold_ids(question(answerable=False), [PETS, RENT]) == []

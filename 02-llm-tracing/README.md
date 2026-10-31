@@ -2,7 +2,7 @@
 
 **Goal:** trace every step of an LLM pipeline and be able to answer *"why did this answer go wrong?"* in under a minute.
 **Time:** 2–3 weeks. Instruments project 01.
-**Status:** 🟨 In progress · M1–M3 done · tracked in the [02 milestone](https://github.com/fkiptooh-r/production-ai-systems/milestone/3) (#30–#36)
+**Status:** 🟨 In progress · M1–M4 done · tracked in the [02 milestone](https://github.com/fkiptooh-r/production-ai-systems/milestone/3) (#30–#36)
 
 ## What you'll learn
 - Traces, spans and attributes (OpenTelemetry concepts)
@@ -16,7 +16,7 @@
 - [x] **M1 · Hand-rolled tracer.** Before using any tool, write a `@traced` decorator that records span name, parent, start/end time, inputs and outputs to a JSONL file. ~50 lines. This is how you'll understand what the tools do.
 - [x] **M2 · Instrument project 01.** Spans for `embed_query`, `vector_search`, `keyword_search`, `fuse`, `rerank`, `generate`. Attributes: `tenant_id`, `model`, `tokens_in/out`, `cost_usd`, `latency_ms`.
 - [x] **M3 · Real tool.** Self-host Langfuse (docker compose) or Phoenix and send the same traces there via its SDK or OpenTelemetry.
-- [ ] **M4 · Failure taxonomy.** Run the 01 eval set and collect at least 30 bad answers. Label each with a root cause:
+- [x] **M4 · Failure taxonomy.** Run the 01 eval set and collect at least 30 bad answers. Label each with a root cause:
   `retrieval_miss` · `rerank_drop` · `hallucination` · `ignored_context` · `format_error` · `wrong_refusal` · `timeout`
 - [ ] **M5 · Forensics tool.** Given a trace id, automatically suggest the likely cause using checks:
   Was the gold chunk retrieved? Did it survive reranking? Is the answer supported by the context? Optionally add an LLM classifier for the hard cases.
@@ -73,6 +73,20 @@ RAM; the data stays in Docker volumes.
 The exporter speaks plain OpenTelemetry (OTLP over HTTP), so another backend is a config
 change: unset the `LANGFUSE_*` keys and set `OTEL_EXPORTER_OTLP_ENDPOINT` (for example Arize
 Phoenix at `http://127.0.0.1:6006`).
+
+**Failure taxonomy (M4).** Needs Postgres + Ollama for the runs only; labelling is offline.
+
+```bash
+cd 01-hybrid-rag      # 32 harder questions, three setups, ~20 min on CPU
+export TRACE_FILE=../02-llm-tracing/traces/m4.jsonl
+uv run eval-answers --questions eval/hard_questions.jsonl     --out ../02-llm-tracing/data/runs/hard-llama-vector.jsonl
+uv run eval-answers --questions eval/hard_questions.jsonl --model qwen2.5:1.5b     --out ../02-llm-tracing/data/runs/hard-qwen-vector.jsonl
+uv run eval-answers --questions eval/hard_questions.jsonl --searcher hybrid+rerank     --out ../02-llm-tracing/data/runs/hard-llama-rerank.jsonl
+cd ../02-llm-tracing
+uv run failure-candidates   # evidence per answer from runs + traces -> data/candidates.jsonl
+# read every answer, write data/failures.jsonl (label + one-line note per bad answer)
+uv run taxonomy             # counts and chart
+```
 
 ```python
 from tracing.tracer import set_attribute, traced
@@ -250,6 +264,78 @@ features, only the UI (3000) and the media store (9090) published, both on 127.0
 `restart: unless-stopped` rather than `always`, so 2.4 GB doesn't come back on every boot; no
 default passwords (Compose refuses to start until `langfuse-setup` has written them); headless
 init creates the org, project, API keys and admin user, so there's no sign-up page.
+
+### M4 · Failure taxonomy (96 answers, 43 bad, every one read by hand)
+
+**Getting enough failures.** Lab 01's own eval produces ~5 bad answers, too few to learn
+from. So I wrote **32 harder questions** (`01-hybrid-rag/eval/hard_questions.jsonl`, checked
+by lab 01's eval-set tests like the original 60) aimed at how answers go wrong rather than
+at retrieval: arithmetic (*"rent is KES 50,000, what do I pay before the keys?"*),
+conditions (*"a dog on the third floor?"*), negations, another agency's rule (*"the M-Pesa
+paybill?"* at an agency that only takes bank transfers), false premises (*"when is the
+application fee refunded?"* where there is none) and not-in-data questions. Three setups ran
+them: llama3.2:3b with vector search (lab 01 as shipped), qwen2.5:1.5b, and llama3.2:3b with
+hybrid search + reranking.
+
+**Method.** `failure-candidates` joins each answer with its trace: the gold chunk ids, whether
+first-stage search found them, whether they survived reranking, whether they were cited, and
+any error, plus a suggested label from that evidence alone. Then every answer was read and
+labelled by hand with a one-line reason (`data/failures.jsonl`). Root cause = the first stage
+of the pipeline that went wrong.
+
+```
+43 bad answers out of 96
+
+ignored_context   15  ██████████████████████████████
+format_error      15  ██████████████████████████████
+wrong_refusal     10  ████████████████████
+hallucination      3  ██████
+retrieval_miss     0
+rerank_drop        0
+timeout            0
+```
+
+| Setup | Bad answers | Main cause |
+|-------|------------:|------------|
+| llama3.2:3b + vector (lab 01) | 10 / 32 | ignored_context 4, wrong_refusal 3 |
+| llama3.2:3b + hybrid + rerank | 11 / 32 | ignored_context 5, wrong_refusal 3 |
+| qwen2.5:1.5b + vector | **22 / 32** | format_error 11 (no citation) |
+
+By question kind: conditional 14, numeric 11, cross-tenant 7, false premise 6, negation 4,
+not-in-data 1.
+
+**What the data says**
+- **Retrieval is not the problem.** The chunk holding the answer was retrieved for **84 of 84**
+  answerable questions in every setup, and the reranker kept it every time (28/28). All 43
+  failures happened in generation. More retrieval work (hybrid, reranking, the A1 rewriting
+  ideas) would not have fixed a single one of them, which matches M2's latency finding.
+- **`ignored_context`: the right text was in front of the model and it got it wrong.** It
+  counted 7 late days from the 1st, skipping a grace period to the 5th (KES 3,500 instead of
+  1,500), *in both llama setups*; answered "Yes, you pay for water" while quoting the line
+  that says it's included; said the 8am drive is "outside rush hour" from a chunk saying
+  7–9am is the worst. Conditions and arithmetic are where a 3B model breaks.
+- **`wrong_refusal` on false premises.** Asked *"when is the application fee refunded?"*,
+  every setup said "I don't know", although the retrieved chunk says there is no fee. The
+  prompt only offers two ways out, answer or "I don't know", so a premise the sources
+  contradict lands in the wrong one.
+- **`hallucination` is rare (3) but the worst kind:** both llama setups invented a *daily*
+  late fee (10% of rent ÷ 30) because the question assumed one.
+- **qwen2.5:1.5b mostly skips citations** (11 correct answers without one, and one answer that
+  was only `[1]`). At half the size it's fast (p50 5.2 s vs 14.7 s per answer) but doesn't follow the
+  output contract; 13 of the 15 `format_error`s were otherwise correct.
+
+**What the automated checks missed.** Lab 01's answer eval passes an answer that cites a chunk
+containing the expected phrase. **11 of the 43 bad answers passed it**, every one of them
+because it cited the right chunk and then said something wrong about it. And the
+evidence-only suggestion matched the hand label for **23 of 43**: the trace can show *where*
+the right text was, never *what the model did with it*. That's the case for an LLM judge
+that checks the claim against the cited text (project 03, and A5 in lab 01, #29), and for M5's
+forensics tool needing more than retrieval checks.
+
+**What I'd change because of it (each needs its own measurement):** let the prompt correct a
+premise the sources contradict, instead of only "answer or I don't know"; spell out
+conditions and arithmetic in the answer before the final figure; keep llama3.2:3b over
+qwen2.5:1.5b for answering, since speed doesn't pay for a broken citation contract.
 
 ## Done when
 - You can click (or query) a bad answer and see the failing step and its category

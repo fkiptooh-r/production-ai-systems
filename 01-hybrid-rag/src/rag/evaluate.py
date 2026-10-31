@@ -34,6 +34,10 @@ from rag.ingest import PROJECT_DIR, ChunkStore, build_chunks, load_documents
 
 QUESTIONS_FILE = PROJECT_DIR / "eval" / "questions.jsonl"
 KINDS = ("direct", "paraphrase", "exact", "not_in_data")
+# The harder set (02 M4) aims at the ways answers go wrong, not at retrieval alone:
+# arithmetic, conditions, negations, another agency's rule, and questions built on a false premise.
+HARD_QUESTIONS_FILE = PROJECT_DIR / "eval" / "hard_questions.jsonl"
+HARD_KINDS = ("numeric", "conditional", "negation", "cross_tenant", "false_premise", "not_in_data")
 SEARCHERS = ["random", "vector", "keyword", "hybrid"]
 SEARCHERS += [f"{s}+rerank" for s in SEARCHERS[1:]]  # second stage on top of any real search
 
