@@ -80,6 +80,7 @@ cd ../00-foundations && docker compose up -d && cd ../01-hybrid-rag
 ollama pull nomic-embed-text                   # embedding model, ~270 MB (Ollama must be running)
 uv sync
 uv run pytest                                  # DB tests skip if Postgres isn't running
+                                               # and use their own DB, ai_systems_test (#62)
 uv run ingest                                  # headings strategy (default) + embeddings
 uv run ingest --strategy fixed --size 80 --overlap 15
 uv run evaluate                                # random baseline

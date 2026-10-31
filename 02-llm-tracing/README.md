@@ -164,15 +164,27 @@ Counts include one warm-up call per run (tenant `none`).
   $3/$15 per 1M tokens**, i.e. ~$0.0014 per answer, ~$1.45 per 1,000 questions. Input is 94%
   of the tokens (the four chunks), so `TOP_K` is the main cost lever.
 
-**The first real run caught a production failure: embedding drift (#62).** Answers fell from
-20/20 to **6/20** passing, mostly false "I don't know". The traces showed `generate` was
-fine but `vector_search` returned unrelated chunks (a deposit question got the Kilimani area
-guide first). Re-measuring: vector search MRR **0.99 → 0.09**. Cause: Ollama auto-updated
-the evening after the chunks were embedded, and the same text now embeds to a different
-vector (cosine between stored and fresh ≈ 0.0). Re-embedding (`uv run ingest`) restored
-MRR 0.99 and the answers (3/3 abstentions, 0/17 false refusals, 17/17 grounded). No test
-failed and nothing crashed, which is the point: only measuring the real system caught it.
-#62 adds a startup check so it can't happen silently again.
+**The first real run caught a silent failure (#62), and I misdiagnosed it at first.**
+Answers fell from 20/20 to **6/20**, mostly false "I don't know". The traces showed `generate`
+was fine but `vector_search` returned unrelated chunks (a deposit question got the Kilimani
+area guide first); re-measured, vector search MRR was **0.99 → 0.09**. The stored vectors no
+longer matched what Ollama produces for the same text (cosine ≈ 0.0).
+
+- **First explanation (wrong):** Ollama had auto-updated after the chunks were embedded, so
+  the embedding model drifted. Re-embedding (`uv run ingest`) fixed it, which seemed to
+  confirm it.
+- **What actually happened:** the next day the same failure came back with *exactly* the
+  same numbers and no Ollama change. Both times I had just run lab 01's tests. The database
+  tests used the dev database: `test_vector.py` replaces every chunk and embeds them with a
+  fake word-hash embedder. Cosine between the stored vectors and that fake embedder: **1.0000
+  for all 64 chunks**.
+- **Fix (#62):** the tests now create and use their own database, `ai_systems_test`, and
+  refuse to run against the dev one. Proof: a full run with Postgres up (170 tests) leaves the
+  dev database's embedding fingerprint unchanged, and vector MRR stays 0.99.
+
+Lessons: a fix that works doesn't prove the diagnosis, so reproduce before explaining; and
+tests that pass can still be the cause. Only measuring the real system, and tracing it,
+caught this at all.
 
 **Two things M2 depended on M1 for:** answers report their `trace_id` (CLI, eval results,
 web `done` event), and the web worker thread runs in a copy of the caller's context, so a
