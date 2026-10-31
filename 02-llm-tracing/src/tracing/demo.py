@@ -4,6 +4,8 @@ The steps sleep instead of calling Ollama or Postgres, so this runs anywhere in 
 M2 puts the same decorator on lab 01's real functions.
 
     uv run trace-demo      # writes 3 traces (one fails), shows the last, prints overhead
+
+With Langfuse keys in ../.env the 3 traces also appear at http://localhost:3000.
 """
 
 import os
@@ -11,7 +13,9 @@ import sys
 import tempfile
 import time
 
-from tracing import tracer
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+
+from tracing import otel, tracer
 from tracing.tracer import set_attribute, traced
 from tracing.view import load, render, summary
 
@@ -50,22 +54,47 @@ def answer(question: str, tenant_id: str) -> str:
     return generate(question, chunks)
 
 
-def overhead_us(calls: int = 5_000) -> tuple[float, float]:
-    """Microseconds per call of a no-op function, without and with @traced."""
+class _Discard(SpanExporter):
+    """Accepts spans and drops them: measures the tracer, not the network."""
+
+    def export(self, spans):
+        return SpanExportResult.SUCCESS
+
+
+def per_call_us(fn, calls: int) -> float:
+    start = time.perf_counter()
+    for i in range(calls):
+        fn(i)
+    return (time.perf_counter() - start) / calls * 1e6
+
+
+def overhead_us(calls: int = 5_000) -> dict[str, float]:
+    """Microseconds per call of a no-op function: plain, then @traced with each exporter."""
 
     def plain(x: int) -> int:
         return x
 
     wrapped = traced(plain)
-    start = time.perf_counter()
-    for i in range(calls):
-        plain(i)
-    bare = (time.perf_counter() - start) / calls * 1e6
-    start = time.perf_counter()
-    for i in range(calls):
-        wrapped(i)
-    with_trace = (time.perf_counter() - start) / calls * 1e6
-    return bare, with_trace
+    results = {"plain function": per_call_us(plain, calls)}
+    saved = {k: os.environ.get(k) for k in ("TRACE_FILE", "TRACING")}
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["TRACE_FILE"] = os.path.join(tmp, "bench.jsonl")
+        try:
+            otel.disable()
+            os.environ["TRACING"] = "on"
+            results["@traced, JSONL file (M1)"] = per_call_us(wrapped, calls)
+            otel.reset()
+            otel.configure(_Discard(), batch=True)
+            os.environ["TRACING"] = "otlp"
+            results["@traced, OTel batch export (M3)"] = per_call_us(wrapped, calls)
+        finally:
+            otel.reset()
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+    return results
 
 
 def main() -> None:
@@ -85,11 +114,7 @@ def main() -> None:
     print(f"\ntrace {last}")
     print("\n".join(render(traces[last])))
 
-    with tempfile.TemporaryDirectory() as tmp:
-        os.environ["TRACE_FILE"] = os.path.join(tmp, "bench.jsonl")
-        bare, with_trace = overhead_us()
-        del os.environ["TRACE_FILE"]
-    print(
-        f"\nOverhead: {bare:.2f} µs per plain call, {with_trace:.1f} µs per traced call "
-        f"(+{with_trace - bare:.1f} µs, mostly the JSONL write)."
-    )
+    otel.flush()  # send this run's spans now, if an exporter is configured
+    print("\nOverhead per call:")
+    for label, us in overhead_us().items():
+        print(f"  {label:<34}{us:>9.1f} µs")

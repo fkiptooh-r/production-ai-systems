@@ -7,11 +7,16 @@ authors = [
     { name = "fkiptooh-r", email = "fkiptooh@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+    "python-dotenv>=1.2.4",
+]
 
 [project.scripts]
 trace-demo = "tracing.demo:main"
 trace-view = "tracing.view:main"
+langfuse-setup = "tracing.langfuse_setup:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]

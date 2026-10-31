@@ -2,7 +2,7 @@
 
 **Goal:** trace every step of an LLM pipeline and be able to answer *"why did this answer go wrong?"* in under a minute.
 **Time:** 2–3 weeks. Instruments project 01.
-**Status:** 🟨 In progress · M1–M2 done · tracked in the [02 milestone](https://github.com/fkiptooh-r/production-ai-systems/milestone/3) (#30–#36)
+**Status:** 🟨 In progress · M1–M3 done · tracked in the [02 milestone](https://github.com/fkiptooh-r/production-ai-systems/milestone/3) (#30–#36)
 
 ## What you'll learn
 - Traces, spans and attributes (OpenTelemetry concepts)
@@ -15,7 +15,7 @@
 
 - [x] **M1 · Hand-rolled tracer.** Before using any tool, write a `@traced` decorator that records span name, parent, start/end time, inputs and outputs to a JSONL file. ~50 lines. This is how you'll understand what the tools do.
 - [x] **M2 · Instrument project 01.** Spans for `embed_query`, `vector_search`, `keyword_search`, `fuse`, `rerank`, `generate`. Attributes: `tenant_id`, `model`, `tokens_in/out`, `cost_usd`, `latency_ms`.
-- [ ] **M3 · Real tool.** Self-host Langfuse (docker compose) or Phoenix and send the same traces there via its SDK or OpenTelemetry.
+- [x] **M3 · Real tool.** Self-host Langfuse (docker compose) or Phoenix and send the same traces there via its SDK or OpenTelemetry.
 - [ ] **M4 · Failure taxonomy.** Run the 01 eval set and collect at least 30 bad answers. Label each with a root cause:
   `retrieval_miss` · `rerank_drop` · `hallucination` · `ignored_context` · `format_error` · `wrong_refusal` · `timeout`
 - [ ] **M5 · Forensics tool.** Given a trace id, automatically suggest the likely cause using checks:
@@ -53,6 +53,26 @@ uv run trace-view --file ../01-hybrid-rag/traces/traces.jsonl --stats
 ```
 
 The browser chat sends the `trace_id` in its final `done` (or `error`) event.
+
+**Langfuse (M3).** Self-hosted, six containers, ~2.4 GB of RAM while running.
+
+```bash
+cd 02-llm-tracing
+uv run langfuse-setup                 # once: random secrets -> langfuse/.env, keys -> ../.env
+cd langfuse && docker compose up -d   # first start pulls ~1-2 GB and migrates: 3-5 min
+curl http://127.0.0.1:3000/api/public/health        # {"status":"OK","version":"4.x"}
+```
+
+Open http://localhost:3000 and log in as `admin@langfuse.local` with
+`LANGFUSE_ADMIN_PASSWORD` from `langfuse/.env` (both `.env` files are gitignored). With the
+keys in the repo-root `.env`, every traced command (the demo, `ask`, `serve`,
+`eval-answers`) also sends its spans to Langfuse; the trace id is the same in both places.
+`TRACING=otlp` sends to Langfuse only, without the JSONL file. `docker compose stop` frees the
+RAM; the data stays in Docker volumes.
+
+The exporter speaks plain OpenTelemetry (OTLP over HTTP), so another backend is a config
+change: unset the `LANGFUSE_*` keys and set `OTEL_EXPORTER_OTLP_ENDPOINT` (for example Arize
+Phoenix at `http://127.0.0.1:6006`).
 
 ```python
 from tracing.tracer import set_attribute, traced
@@ -158,6 +178,66 @@ failed and nothing crashed, which is the point: only measuring the real system c
 web `done` event), and the web worker thread runs in a copy of the caller's context, so a
 request's spans stay one trace. Tests cover both, plus a failing model call recorded as an
 error on `generate`, `answer` and `chat_request` with the trace id in the error event.
+
+### M3 · Langfuse over OpenTelemetry
+
+Our tracer stays the API. When an exporter is configured, each `span()` also opens an
+OpenTelemetry span **and takes its ids from it**, so `trace-view 90636cb9` and the Langfuse
+trace `90636cb9…` are the same request. Finished spans go to OpenTelemetry's
+`BatchSpanProcessor`: a background thread sends them in batches over OTLP/HTTP to
+`/api/public/otel/v1/traces`. Attributes are renamed to what Langfuse reads:
+
+| Ours | Sent as |
+|------|---------|
+| `inputs`, `output` | `langfuse.observation.input`, `.output` (JSON) |
+| `tokens_in`, `tokens_out` | `gen_ai.usage.input_tokens`, `.output_tokens`, and the span becomes a **generation** |
+| `model` | `gen_ai.request.model` on generations, metadata elsewhere |
+| `cost_usd` | `langfuse.observation.cost_details` |
+| `tenant_id` | trace metadata, observation metadata and a `tenant:<id>` tag, on **every** span |
+| error | span status ERROR, `langfuse.observation.level` ERROR, status message |
+| anything else (`retrieved`, `cited`, `cost_usd_hosted`…) | `langfuse.observation.metadata.<key>` |
+
+A lab 01 question, read back from Langfuse's API next to the JSONL tree. Same ids, same
+nesting, same timings; token usage only on the LLM call:
+
+```
+answer         SPAN         10.73 s
+vector_search  SPAN          0.49 s
+embed_query    SPAN          0.46 s
+generate       GENERATION   10.24 s   usage: input 268, output 25
+```
+
+**Overhead per traced call** (`uv run trace-demo`, no-op function, 5,000 calls, 3 runs):
+
+| Exporter | per call |
+|----------|---------:|
+| plain function | 0.1–0.2 µs |
+| JSONL file, synchronous (M1) | 690–1,370 µs |
+| **OpenTelemetry, batch export (M3)** | **107–168 µs** |
+
+**About 6–8× cheaper**, because the request thread only builds the span and queues it. What's
+left (~0.15 ms) is creating the OTel span and serialising inputs and outputs to JSON.
+Against a 10 s answer it is invisible.
+
+**When Langfuse is down** (web container stopped): the demo finished normally, request
+timings didn't change (~215 ms each) and the JSONL file still got every span. The exporter
+retried, logged `Failed to export spans batch`, and dropped that batch; the only cost was
+~2 s extra at program exit (10.6 s vs 8.8 s). Observability must never take the app down,
+and here it doesn't. The trade-off: spans produced while the backend is down are lost from
+Langfuse (the JSONL copy keeps them).
+
+**Two mistakes found by reading the data back, not by tests passing:**
+- **`answer` showed up as a generation.** When a span has a model name and no explicit type,
+  Langfuse infers "generation", which would double-count LLM calls in cost and usage views.
+  Every span now sends its type explicitly; a test pins it.
+- **Langfuse v4 retired the `/api/public/traces` read API** ("events_only" mode); reads go
+  through `/api/public/v2/observations`. The OTLP ingestion path is unchanged.
+
+**Self-hosting notes.** The compose file is the official one, slimmed: no in-app agent or AI
+features, only the UI (3000) and the media store (9090) published, both on 127.0.0.1;
+`restart: unless-stopped` rather than `always`, so 2.4 GB doesn't come back on every boot; no
+default passwords (Compose refuses to start until `langfuse-setup` has written them); headless
+init creates the org, project, API keys and admin user, so there's no sign-up page.
 
 ## Done when
 - You can click (or query) a bad answer and see the failing step and its category
